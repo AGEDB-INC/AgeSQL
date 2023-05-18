@@ -54,9 +54,18 @@ OBJS = \
 
 all: psql
 
-psql: $(OBJS)
+cypher.c: cypher.l
 	flex -b -Cfe -p -p -o'cypher.c' cypher.l
+
+cypher.tab.c: cypher.y
 	bison -d cypher.y
+
+psql: cypher.tab.c cypher.c $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o agesql
+
+.PHONY: clean
+
+clean:
+	rm -f psql $(OBJS) cypher.c cypher.tab.c cypher.tab.h
 
 

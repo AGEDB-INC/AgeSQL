@@ -71,15 +71,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "postgres_fe.h"                                                        
-                                                                                
-#include "psqlscanslash.h"                                                      
-#include "common/logging.h"                                                     
-#include "fe_utils/conditional.h"                                               
-                                                                                
-#include "libpq-fe.h"                                                           
-#include "cypherscan.h"                                                         
-#include "cypher.tab.h" 
+#include "postgres_fe.h"
+
+#include "psqlscanslash.h"
+#include "common/logging.h"
+#include "fe_utils/conditional.h"
+
+#include "libpq-fe.h"
+#include "cypherscan.h"
+#include "cypher.tab.h"
 
 void yyerror(char const *s);
 
@@ -1349,7 +1349,7 @@ yyreduce:
     {
   case 2:
 #line 47 "cypher.y"
-    { printf("Query parsed successfully.\n"); }
+    { /* no action needed */ }
 #line 1354 "cypher.tab.c"
     break;
 
@@ -1586,16 +1586,16 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 182 "cypher.y"
+#line 162 "cypher.y"
 
 
 void yyerror(char const *s)
 {
-	printf("Parser error: %s\n", s);
+    fprintf(stderr, "Parser error: %s\n", s);
 }
 
-void
-psql_scan_cypher_command(PsqlScanState state)
+void psql_scan_cypher_command(PsqlScanState state)
 {
-
+	yylex();
 }
+
