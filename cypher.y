@@ -2,15 +2,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "postgres_fe.h"
+#include "postgres_fe.h"                                                        
+                                                                                
+#include "psqlscanslash.h"                                                      
+#include "common/logging.h"                                                     
+#include "fe_utils/conditional.h"                                               
+                                                                                
+#include "libpq-fe.h"                                                           
+#include "cypherscan.h"                                                         
+#include "cypher.tab.h" 
 
-#include "psqlscanslash.h"
-#include "common/logging.h"
-#include "fe_utils/conditional.h"
-
-#include "libpq-fe.h"
-#include "cypherscan.h"
-#include "cypher.tab.h"
+#define parser_yyerror(msg) scanner_yyerror(msg, yyscanner)
+#define parser_errposition(pos) scanner_errposition(pos, yyscanner)
 
 void yyerror(char const *s);
 
@@ -44,23 +47,23 @@ int order_clause_direction = 1; // 1 for ascending, -1 for descending
 %%
 
 statement:
-    { /* no action needed */ }
+    query
     ;
 
 query:
     match_clause
-    where_clause_opt
-    with_clause_opt
-    return_clause
+    | where_clause
+    | with_clause
+    | return_clause
     ;
 
 match_clause:
     MATCH path_pattern
-	;
+	;    
 
 path_pattern:
     node_pattern
-    | node_pattern ARROW rel_pattern node_pattern
+    | path_pattern ARROW rel_pattern node_pattern
     ;
 
 node_pattern:
@@ -70,7 +73,6 @@ node_pattern:
 node_labels_opt:
     /* empty */
     | COLON IDENTIFIER
-    | node_labels_opt COLON IDENTIFIER
     ;
 
 node_properties_opt:
@@ -79,15 +81,18 @@ node_properties_opt:
     ;
 
 rel_pattern:
-    rel_type rel_direction rel_type
+    rel_type
+    | rel_pattern rel_direction rel_type
     ;
 
 rel_type:
-    /* no action needed */
+    COLON IDENTIFIER
+     | LBRACKET IDENTIFIER RBRACKET
     ;
 
 rel_direction:
-    /* no action needed */
+    ARROW
+    | ARROW IDENTIFIER ARROW
     ;
 
 map_literal:
@@ -110,64 +115,72 @@ expression:
     | IDENTIFIER
     ;
 
-where_clause_opt:
-    /* empty */
+where_clause:
     | WHERE expression
     ;
 
-with_clause_opt:
-    /* empty */
-    | WITH expression_list return_clause
+with_clause:
+    WITH expression_list
     ;
 
 expression_list:
-    expression
-    | expression_list COMMA expression
-    ;
+	expression
+	| expression_list COMMA expression
+	;
 
 return_clause:
-    RETURN return_item_list order_clause_opt
+	RETURN return_item_list order_clause_opt skip_clause_opt limit_clause_opt
 ;
 
 return_item_list:
-    return_item
-    | return_item_list COMMA return_item
-    ;
+	return_item
+	| return_item_list COMMA return_item
+	;
 
 return_item:
-    expression
-    | expression AS IDENTIFIER
-    ;
+	expression
+	| expression AS IDENTIFIER
+	;
 
 order_clause_opt:
-    /* empty */
-    | ORDER BY sort_item_list
-    ;
+	/* empty */
+	| ORDER BY sort_item_list
+	;
 
 sort_item_list:
-    sort_item
-    | sort_item_list COMMA sort_item
-    ;
+	sort_item
+	| sort_item_list COMMA sort_item
+	;
 
 sort_item:
-    expression sort_direction_opt
-    ;
+	expression sort_direction_opt
+	;
 
 sort_direction_opt:
-    /* empty */
-    | ASC
-    | DESC
-    ;
+	/* empty */
+	| ASC
+	| DESC
+	;
+
+skip_clause_opt:
+	/* empty */
+	| SKIP INTEGER
+	;
+
+limit_clause_opt:
+	/* empty */
+	| LIMIT INTEGER
+	;
 
 %%
 
 void yyerror(char const *s)
 {
-    fprintf(stderr, "Parser error: %s\n", s);
+	printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
 }
 
-void psql_scan_cypher_command(PsqlScanState state)
+void
+psql_scan_cypher_command(PsqlScanState state)
 {
-	yylex();
+	yyparse();
 }
-
