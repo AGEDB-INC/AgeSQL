@@ -9,6 +9,6 @@
 #define CYPHERSCAN_H
 
 #include "fe_utils/psqlscan.h"
-void psql_scan_cypher_command(PsqlScanState state);
+void psql_scan_cypher_command(char* data);
 
 #endif   /* CYPHERSCAN_H */

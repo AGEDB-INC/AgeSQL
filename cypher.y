@@ -12,7 +12,7 @@
 #include "cypherscan.h"
 #include "cypher.tab.h"
 
-void yyerror(char const *s);
+void yyerror(char* data, char const *s);
 
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
@@ -21,7 +21,7 @@ typedef struct {
     int int_val;
 } yyval;
 
-int yylex(void);
+int yylex(char* data);
 
 int order_clause_direction = 1; // 1 for ascending, -1 for descending
 %}
@@ -39,12 +39,14 @@ int order_clause_direction = 1; // 1 for ascending, -1 for descending
 %left PIPE
 %left ARROW
 
+%param {char* data}
+
 %start statement
 
 %%
 
 statement:
-    { /* no action needed */ }
+    query SEMICOLON
     ;
 
 query:
@@ -161,13 +163,13 @@ sort_direction_opt:
 
 %%
 
-void yyerror(char const *s)
+void yyerror(char* data, char const *s)
 {
     fprintf(stderr, "Parser error: %s\n", s);
 }
 
-void psql_scan_cypher_command(PsqlScanState state)
+void psql_scan_cypher_command(char *data)
 {
-	yylex();
+    yyparse(data);
 }
 
