@@ -5,8 +5,11 @@
 #include "postgres_fe.h"                                                        
                                                                                 
 #include "psqlscanslash.h"                                                      
-#include "common/logging.h"                                                     
-#include "fe_utils/conditional.h"                                               
+#include "common/logging.h"
+#include "fe_utils/conditional.h"
+
+#include "fe_utils/psqlscan_int.h"
+#include "fe_utils/psqlscan.h"
                                                                                 
 #include "libpq-fe.h"                                                           
 #include "cypherscan.h"                                                         
@@ -15,21 +18,23 @@
 #define parser_yyerror(msg) scanner_yyerror(msg, yyscanner)
 #define parser_errposition(pos) scanner_errposition(pos, yyscanner)
 
-void yyerror(char const *s);
+void yyerror(void* scanner, char const *s);
 
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
-typedef struct {
+typedef struct
+{
     char* str_val;
     int int_val;
 } yyval;
 
-int yylex(void);
-
 int order_clause_direction = 1; // 1 for ascending, -1 for descending
+
+int match = 0;
 %}
 
-%union {
+%union
+{
     char* str_val;
     int int_val;
 }
@@ -38,6 +43,10 @@ int order_clause_direction = 1; // 1 for ascending, -1 for descending
 %token <int_val> INTEGER
 %token <str_val> IDENTIFIER STRING
 %token UNKNOWN
+
+%type <str_val> str_val
+
+%param {void* scanner}
 
 %left PIPE
 %left ARROW
@@ -58,8 +67,11 @@ query:
     ;
 
 match_clause:
-    MATCH path_pattern
-	;    
+    MATCH path_pattern 
+        {
+            match = 1;
+        }
+    ;
 
 path_pattern:
     node_pattern
@@ -72,12 +84,19 @@ node_pattern:
 
 node_labels_opt:
     /* empty */
-    | COLON IDENTIFIER
+    | IDENTIFIER
+    | COLON IDENTIFIER 
+    | node_labels_opt COLON IDENTIFIER
     ;
 
 node_properties_opt:
     /* empty */
     | LBRACE map_literal RBRACE
+    ;
+
+str_val:
+    IDENTIFIER 
+    | STRING 
     ;
 
 rel_pattern:
@@ -174,13 +193,47 @@ limit_clause_opt:
 
 %%
 
-void yyerror(char const *s)
+void yyerror(void* scanner, char const *s)
 {
 	printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
 }
 
-void
+char*
 psql_scan_cypher_command(PsqlScanState state)
-{
-	yyparse();
+{ 
+    PQExpBufferData mybuf;
+
+    /* Must be scanning already */
+    Assert(state->scanbufhandle != NULL);
+
+    /* Build a local buffer that we'll return the data of */
+    initPQExpBuffer(&mybuf);
+
+    /* Set current output target */
+    state->output_buf = &mybuf;
+
+    /* Set input source */
+    if (state->buffer_stack != NULL)
+            yy_switch_to_buffer(state->buffer_stack->buf, state->scanner);
+    else
+            yy_switch_to_buffer(state->scanbufhandle, state->scanner);
+
+    /* And lex. */
+    yyparse(state->scanner);
+
+    if (match == 1) { 
+        state->start_state = 1;
+    }
+
+    mybuf.data = state->scanbuf;
+
+    /* There are no possible errors in this lex state... */
+
+    /*
+     * In case the caller returns to using the regular SQL lexer, reselect the
+     * appropriate initial state.
+     */
+    psql_scan_reselect_sql_lexer(state);
+
+    return mybuf.data;
 }

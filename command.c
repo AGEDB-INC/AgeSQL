@@ -46,6 +46,7 @@
 #include "psqlscanslash.h"
 #include "settings.h"
 #include "variables.h"
+#include "cypherscan.h"
 
 /*
  * Editable database object types.
@@ -273,6 +274,77 @@ HandleSlashCmds(PsqlScanState scan_state,
 	return status;
 }
 
+backslashResult
+HandleCypherCmds(PsqlScanState scan_state,
+                                ConditionalStack cstack,
+                                PQExpBuffer query_buf,
+                                PQExpBuffer previous_buf)
+{
+    backslashResult status;
+    char *cypher_cmd;
+    char *sql_cmd;
+    char *arg;
+
+    Assert(scan_state != NULL);
+    Assert(cstack != NULL);
+
+    cypher_cmd = psql_scan_cypher_command(scan_state);
+
+    sql_cmd = (char*) malloc(strlen(cypher_cmd) + strlen("SELECT * FROM cypher($$") + strlen("$$) AS (result agtype);") + 1);
+
+    strcpy(sql_cmd, "SELECT * FROM cypher($$");    
+    strcat(sql_cmd, cypher_cmd);    
+    strcat(sql_cmd, "$$) AS (result agtype);");
+
+    /* And try to execute it */
+    status = exec_command(sql_cmd, scan_state, cstack, query_buf, previous_buf);
+
+    if (status == PSQL_CMD_UNKNOWN)
+    {
+            pg_log_error("invalid command \\%s", sql_cmd);
+            if (pset.cur_cmd_interactive)
+                    pg_log_error_hint("Try \\? for help.");
+            status = PSQL_CMD_ERROR;
+    }
+
+    if (status != PSQL_CMD_ERROR)
+    {
+            /*
+             * Eat any remaining arguments after a valid command.  We want to
+             * suppress evaluation of backticks in this situation, so transiently
+             * push an inactive conditional-stack entry.
+             */
+            bool		active_branch = conditional_active(cstack);
+
+            conditional_stack_push(cstack, IFSTATE_IGNORED);
+            while ((arg = psql_scan_slash_option(scan_state,
+                                                                                     OT_NORMAL, NULL, false)))
+            {
+                    if (active_branch)
+                            pg_log_warning("\\%s: extra argument \"%s\" ignored", sql_cmd, arg);
+                    free(arg);
+            }
+            conditional_stack_pop(cstack);
+    }
+    else
+    {
+            /* silently throw away rest of line after an erroneous command */
+            while ((arg = psql_scan_slash_option(scan_state,
+                                                                                     OT_WHOLE_LINE, NULL, false)))
+                    free(arg);
+    }
+
+    /* if there is a trailing \\, swallow it */
+    psql_scan_slash_command_end(scan_state);
+
+    free(cypher_cmd);
+    free(sql_cmd);
+
+    /* some commands write to queryFout, so make sure output is sent */
+    fflush(pset.queryFout);
+
+    return status;
+}
 
 /*
  * Subroutine to actually try to execute a backslash command.

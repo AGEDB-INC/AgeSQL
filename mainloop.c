@@ -433,6 +433,11 @@ MainLoop(FILE *source)
 					pg_send_history(history_buf);
 					line_saved_in_history = true;
 				}
+                                
+                                HandleCypherCmds(scan_state,
+                                                            cond_stack,
+                                                            query_buf,
+                                                            previous_buf);
 
 				/* execute query unless we're in an inactive \if branch */
 				if (conditional_active(cond_stack))
@@ -491,8 +496,7 @@ MainLoop(FILE *source)
 					pg_append_history(line, history_buf);
 					pg_send_history(history_buf);
 					line_saved_in_history = true;
-				}
-				psql_scan_cypher_command(scan_state);
+				}                              
 
 				/* execute backslash command */
 				slashCmdStatus = HandleSlashCmds(scan_state,
