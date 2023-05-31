@@ -29,6 +29,11 @@ extern backslashResult HandleSlashCmds(PsqlScanState scan_state,
 									   PQExpBuffer query_buf,
 									   PQExpBuffer previous_buf);
 
+extern backslashResult HandleCypherCmds(PsqlScanState scan_state,
+									   ConditionalStack cstack,
+									   PQExpBuffer query_buf,
+									   PQExpBuffer previous_buf);
+
 extern int	process_file(char *filename, bool use_relative_path);
 
 extern bool do_pset(const char *param,

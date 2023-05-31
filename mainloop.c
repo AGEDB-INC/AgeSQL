@@ -16,12 +16,12 @@
 #include "prompt.h"
 #include "settings.h"
 #include "cypherscan.h"
+#include "cypher.tab.h"
 
 /* callback functions for our flex lexer */
 const PsqlScanCallbacks psqlscan_callbacks = {
 	psql_get_variable,
 };
-
 
 /*
  * Main processing loop for reading lines of input
@@ -46,6 +46,7 @@ MainLoop(FILE *source)
 	bool		success;
 	bool		line_saved_in_history;
 	volatile int successResult = EXIT_SUCCESS;
+	volatile backslashResult cypherCmdStatus = PSQL_CMD_UNKNOWN;
 	volatile backslashResult slashCmdStatus = PSQL_CMD_UNKNOWN;
 	volatile promptStatus_t prompt_status = PROMPT_READY;
 	volatile bool need_redisplay = false;
@@ -354,7 +355,7 @@ MainLoop(FILE *source)
 				puts(_("Use control-D to quit."));
 #else
 				puts(_("Use control-C to quit."));
-#endif
+#endif	
 		}
 
 		/* echo back if flag is set, unless interactive */
@@ -437,7 +438,26 @@ MainLoop(FILE *source)
 				/* execute query unless we're in an inactive \if branch */
 				if (conditional_active(cond_stack))
 				{
-					success = SendQuery(query_buf->data);
+					/* handle cypher match command */
+					if (pg_strncasecmp(query_buf->data, "MATCH", 5) == 0)
+					{
+						cypherCmdStatus = HandleCypherCmds(scan_state,
+											cond_stack,
+											query_buf,
+											previous_buf);
+
+						success = cypherCmdStatus != PSQL_CMD_ERROR;
+
+						if (cypherCmdStatus == PSQL_CMD_SEND)
+						{
+							//char *qry = convert_to_psql_command(query_buf->data);
+							success = SendQuery(convert_to_psql_command(query_buf->data));
+						}
+					}
+
+					else
+						success = SendQuery(query_buf->data);
+
 					slashCmdStatus = success ? PSQL_CMD_SEND : PSQL_CMD_ERROR;
 					pset.stmt_lineno = 1;
 
@@ -465,6 +485,7 @@ MainLoop(FILE *source)
 					/* note that query_buf doesn't change state */
 				}
 			}
+			
 			else if (scan_result == PSCAN_BACKSLASH)
 			{
 				/* handle backslash command */
@@ -492,7 +513,6 @@ MainLoop(FILE *source)
 					pg_send_history(history_buf);
 					line_saved_in_history = true;
 				}
-				psql_scan_cypher_command(scan_state);
 
 				/* execute backslash command */
 				slashCmdStatus = HandleSlashCmds(scan_state,
