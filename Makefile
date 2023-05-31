@@ -68,4 +68,3 @@ psql: cypher.tab.c cypher.c $(OBJS)
 clean:
 	rm -f psql $(OBJS) cypher.c cypher.tab.c cypher.tab.h
 
-

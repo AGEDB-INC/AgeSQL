@@ -46,6 +46,7 @@
 #include "psqlscanslash.h"
 #include "settings.h"
 #include "variables.h"
+#include "cypherscan.h"
 
 /*
  * Editable database object types.
@@ -263,8 +264,6 @@ HandleSlashCmds(PsqlScanState scan_state,
 	}
 
 	/* if there is a trailing \\, swallow it */
-	psql_scan_slash_command_end(scan_state);
-
 	free(cmd);
 
 	/* some commands write to queryFout, so make sure output is sent */
@@ -273,6 +272,32 @@ HandleSlashCmds(PsqlScanState scan_state,
 	return status;
 }
 
+backslashResult
+HandleCypherCmds(PsqlScanState scan_state,
+				ConditionalStack cstack,
+				PQExpBuffer query_buf,
+				PQExpBuffer previous_buf)
+{
+	backslashResult status;
+	
+	/* Parse off the command name */
+	psql_scan_cypher_command(query_buf->data);
+
+	/* And try to execute it */
+	status = PSQL_CMD_SEND;
+
+	if (status == PSQL_CMD_UNKNOWN)
+	{
+		status = PSQL_CMD_ERROR;
+	}
+
+	if (status != PSQL_CMD_ERROR)
+	{
+		conditional_stack_pop(cstack);
+	}
+	
+	return status;
+}
 
 /*
  * Subroutine to actually try to execute a backslash command.
@@ -429,7 +454,6 @@ exec_command(const char *cmd,
 
 	return status;
 }
-
 
 /*
  * \a -- toggle field alignment
