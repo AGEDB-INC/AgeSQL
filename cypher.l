@@ -1,3 +1,5 @@
+%option nounput
+%option noinput
 %option noyywrap
 %{
 #include "postgres_fe.h"                                                        
@@ -13,6 +15,7 @@
 
 %%
 
+[ \t\n] ;
 "->" { return ARROW; }
 "[" { return LBRACKET; }
 "]" { return RBRACKET; }

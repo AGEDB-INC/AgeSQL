@@ -492,7 +492,7 @@ MainLoop(FILE *source)
 					pg_send_history(history_buf);
 					line_saved_in_history = true;
 				}
-				psql_scan_cypher_command(query_buf->data);
+				psql_scan_cypher_command(scan_state);
 
 				/* execute backslash command */
 				slashCmdStatus = HandleSlashCmds(scan_state,
