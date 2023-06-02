@@ -278,18 +278,17 @@ HandleCypherCmds(PsqlScanState scan_state,
 				PQExpBuffer query_buf,
 				PQExpBuffer previous_buf)
 {
+	bool accept;
 	backslashResult status;
 	
 	/* Parse off the command name */
-	psql_scan_cypher_command(query_buf->data);
+	accept = psql_scan_cypher_command(query_buf->data);
 
 	/* And try to execute it */
-	status = PSQL_CMD_SEND;
-
-	if (status == PSQL_CMD_UNKNOWN)
-	{
+	if (accept == true)
+		status = PSQL_CMD_SEND;
+        else
 		status = PSQL_CMD_ERROR;
-	}
 
 	if (status != PSQL_CMD_ERROR)
 	{

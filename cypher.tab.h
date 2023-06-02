@@ -43,9 +43,6 @@
 #if YYDEBUG
 extern int yydebug;
 #endif
-#ifdef RETURN
-# undef RETURN
-#endif
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -97,13 +94,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 59 "cypher.y"
+#line 57 "cypher.y"
 
     char* str_val;
     int int_val;
     bool bool_val;
-    struct edge_pattern* pat;
-    struct map_pair* pair;
+    struct EdgePattern* pat;
+    struct MapPair* pair;
 
 #line 106 "cypher.tab.h"
 

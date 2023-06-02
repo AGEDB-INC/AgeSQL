@@ -31,7 +31,6 @@
 "}" { return RBRACE; }
 "*" { return ASTERISK; }
 "." { return DOT; }
-"exit" { return exit_command; }
 
 "MATCH" { return MATCH; }
 "ON" { return ON; }
