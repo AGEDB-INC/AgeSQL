@@ -16,7 +16,6 @@
 #include "prompt.h"
 #include "settings.h"
 #include "cypherscan.h"
-#include "cypher.tab.h"
 
 /* callback functions for our flex lexer */
 const PsqlScanCallbacks psqlscan_callbacks = {

@@ -10,7 +10,6 @@
 #include "libpq-fe.h"                                                           
 #include "cypherscan.h"
 
-#include "cypher.tab.h"
 #include "fe_utils/psqlscan_int.h"
 
 typedef struct yy_buffer_state* YY_BUFFER_STATE;
@@ -20,48 +19,47 @@ typedef struct {
     int int_val;
 } yyval;
 
+typedef struct EdgePattern {
+    int lower;
+    bool dot;
+    int upper;
+} EdgePattern;
+
+typedef struct MapPair {
+    char* exp;
+    char* idt;
+    struct MapPair* next;
+} MapPair;
+
 void yypush_buffer_state(YY_BUFFER_STATE buffer);
 void *yy_scan_string(char const* str);
-void yyerror(char const* s);
+bool yyerror(char const* s);
 
-void add_item(struct map_pair* head, char* exp, char* idt);
-char *get_list(struct map_pair* head);
-void print_list(struct map_pair* head);
+void add_item(MapPair* head, char* exp, char* idt);
+char* get_list(MapPair* head);
 void reset_vals(void);
 
 int yylex(void);
 int rel_direction = 0; // 1 for "->", -1 for "<-"
 int order_clause_direction = 1; // 1 for ascending, -1 for descending
 
-struct edge_pattern {
-    int lower;
-    bool dot;
-    int upper;
-};
-
-struct map_pair {
-    char* exp;
-    char* idt;
-    struct map_pair* next;
-};
-
 bool match = false;
 bool where = false;
 bool with = false;
 bool rtn = false;
 
-char qry[1000];
+char* qry;
 char* graph_name;
 
-struct map_pair* rtn_list;
+struct MapPair* rtn_list;
 %}
 
 %union {
     char* str_val;
     int int_val;
     bool bool_val;
-    struct edge_pattern* pat;
-    struct map_pair* pair;
+    struct EdgePattern* pat;
+    struct MapPair* pair;
 }
 
 %type <str_val> node_alias_opt node_labels_opt expression rel_alias_opt rel_labels_opt compare logic
@@ -84,7 +82,20 @@ struct map_pair* rtn_list;
 statement:
     query
     | statement query
-    | statement SEMICOLON { YYACCEPT; }
+    | statement SEMICOLON
+      {      
+          if (rtn == false)
+          {
+              MapPair* temp = (MapPair*) malloc(sizeof(MapPair)); 
+              temp->exp = "v";
+              temp->idt = NULL;
+              
+              rtn_list->exp = temp->exp;
+              rtn_list->idt = temp->idt;
+          }
+          
+          YYACCEPT;
+      }
     ;
 
 query:
@@ -178,7 +189,7 @@ map_entry:
     ;
 
 expression:
-    INTEGER { sprintf($$, "%d", $1); }
+    INTEGER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
     | STRING { $$ = $1; }
     | IDENTIFIER { $$ = $1; }
     ;
@@ -229,13 +240,13 @@ item_list:
 item:
     expression
     {
-        $$ = (struct map_pair*) malloc(sizeof(struct map_pair)); 
+        $$ = (MapPair*) malloc(sizeof(MapPair)); 
         $$->exp = $1;
         $$->idt = NULL;
     }
     | expression AS IDENTIFIER
     {
-        $$ = (struct map_pair*) malloc(sizeof(struct map_pair));
+        $$ = (MapPair*) malloc(sizeof(MapPair));
         $$->exp = $1;
         $$->idt = $3;
     }
@@ -272,28 +283,30 @@ limit_clause_opt:
     ;
 %%
 
-void yyerror(char const* s)
+bool yyerror(char const* s)
 {
     printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
+
+    return false;
 }
 
-void add_item(struct map_pair* head, char* exp, char* idt)
+void add_item(MapPair* head, char* exp, char* idt)
 {
-    struct map_pair* current = head;
+    struct MapPair* current = head;
     while (current->next != NULL) {
         current = current->next;
     }
 
     /* now we can add a new variable */
-    current->next = (struct map_pair*) malloc(sizeof(struct map_pair));
+    current->next = (MapPair*) malloc(sizeof(MapPair));
     current->next->exp = exp;
     current->next->idt = idt;
     current->next->next = NULL;
 }
 
-char* get_list(struct map_pair* head)
+char* get_list(MapPair* head)
 {
-    struct map_pair* current = head;
+    struct MapPair* current = head;
 
     char list[1000] = "";
     char* ptr = list;
@@ -304,7 +317,7 @@ char* get_list(struct map_pair* head)
 
         if (current->idt != NULL)
         {
-	    sprintf(temp, "%s agtype", current->idt);
+	    sprintf(temp, "%s agtype%s", current->idt, (current->next != NULL) ? ", " : "");
             strcat(list, temp);
         }
         else
@@ -329,27 +342,32 @@ char* get_list(struct map_pair* head)
     return ptr;
 }
 
-void psql_scan_cypher_command(char* data)
+bool psql_scan_cypher_command(char* data)
 {
     YY_BUFFER_STATE buf = yy_scan_string(data);
     
-    rtn_list = (struct map_pair*) malloc(sizeof(struct map_pair));
+    rtn_list = (MapPair*) malloc(sizeof(MapPair));
     
     yypush_buffer_state(buf);
     yyparse();
+
+    return true;
 }
 
 char* convert_to_psql_command(char* data)
 {
+    char temp[1000] = "";
+    
     /* remove semicolon from query */
     data[strlen(data)-1] = '\0';
 
-    sprintf(qry,
+    sprintf(temp,
         "SELECT * "
         "FROM cypher('%s', $$ "
         "%s "
         "$$) AS (%s);",
-        graph_name, data, (rtn == true) ? get_list(rtn_list) : "v agtype");
+        graph_name, data, get_list(rtn_list));
+    qry = temp;
 
     printf("SENDING: %s\n", qry);
 
@@ -358,7 +376,7 @@ char* convert_to_psql_command(char* data)
     return qry;
 }
 
-void reset_vals()
+void reset_vals(void)
 {
     free(rtn_list);
 

@@ -9,7 +9,7 @@
 #define CYPHERSCAN_H
 
 #include "fe_utils/psqlscan.h"
-void psql_scan_cypher_command(char *);
+bool psql_scan_cypher_command(char *);
 char *convert_to_psql_command(char *);
 
 #endif   /* CYPHERSCAN_H */
