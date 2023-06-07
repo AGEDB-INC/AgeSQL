@@ -354,22 +354,33 @@ bool psql_scan_cypher_command(char* data)
     return true;
 }
 
-char* convert_to_psql_command(char* data)
+char* convert_to_psql_command(char* data, bool is_command)
 {
     char temp[1000] = "";
-    
+
     /* remove semicolon from query */
     data[strlen(data)-1] = '\0';
 
-    sprintf(temp,
-        "SELECT * "
-        "FROM cypher('%s', $$ "
-        "%s "
-        "$$) AS (%s);",
-        graph_name, data, get_list(rtn_list));
-    qry = temp;
+    if (is_command)
+    {
+        sprintf(temp,
+            "SELECT * "
+            "FROM cypher('%s', $$ "
+            "%s "
+            "$$) AS (%s);",
+            graph_name, data, get_list(rtn_list));
+        qry = temp;
+    }
+    else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
+    {
+        sscanf(data, "CREATE GRAPH %ms;", &graph_name);
 
-    printf("SENDING: %s\n", qry);
+        sprintf(temp,
+            "SELECT * "
+            "FROM create_graph('%s');",
+            graph_name);
+        qry = temp;
+    }
 
     reset_vals();
 
