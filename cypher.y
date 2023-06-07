@@ -333,30 +333,41 @@ psql_scan_cypher_command(char* data)
     return true;
 }
 
-char*
-convert_to_psql_command(char* data)
+char* convert_to_psql_command(char* data, bool is_command)
 {
-  char temp[1000] = "";
-  char* qry = NULL;
+    char temp[1000] = "";
+    char* qry = NULL;
 
-  /* Remove semicolon from query */
-  data[strlen(data) - 1] = '\0';
+    /* Remove semicolon from query */
+    data[strlen(data) - 1] = '\0';
 
-  snprintf(temp, sizeof(temp),
-             "SELECT * "
-             "FROM cypher('%s', $$ "
-             "%s "
-             "$$) AS (%s);",
-             graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
+    if (is_command)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM cypher('%s', $$ "
+            "%s "
+            "$$) AS (%s);",
+            graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
+    }
+    else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
+    {
+        sscanf(data, "CREATE GRAPH %ms;", &graph_name);
 
-  qry = strdup(temp);
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM create_graph('%s');",
+            graph_name ? graph_name : pset.graph_name);
+    }
 
-  /* Print debug information */
-  printf("\nINFO: %s\n", qry);
+    qry = strdup(temp);
 
-  reset_vals();
+    /* Print debug information */
+    printf("\nINFO: %s\n", qry);
 
-  return qry;
+    reset_vals();
+
+    return qry;
 }
 
 void reset_vals(void)
