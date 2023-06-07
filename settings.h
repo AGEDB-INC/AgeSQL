@@ -139,6 +139,7 @@ typedef struct _psqlSettings
 	int			fetch_count;
 	int			histsize;
 	int			ignoreeof;
+  char    *graph_name; 
 	PSQL_ECHO	echo;
 	PSQL_ECHO_HIDDEN echo_hidden;
 	PSQL_ERROR_ROLLBACK on_error_rollback;

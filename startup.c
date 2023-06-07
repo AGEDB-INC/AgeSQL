@@ -1109,6 +1109,13 @@ prompt2_hook(const char *newval)
 }
 
 static bool
+graph_name_hook(const char *newval)
+{
+	pset.graph_name = newval ? newval : "";
+  return true;
+}
+
+static bool
 prompt3_hook(const char *newval)
 {
 	pset.prompt3 = newval ? newval : "";
@@ -1250,6 +1257,9 @@ EstablishVariableSpace(void)
 	SetVariableHooks(pset.vars, "PROMPT3",
 					 NULL,
 					 prompt3_hook);
+	SetVariableHooks(pset.vars, "GRAPH_NAME",
+					 NULL,
+					 graph_name_hook);
 	SetVariableHooks(pset.vars, "VERBOSITY",
 					 verbosity_substitute_hook,
 					 verbosity_hook);

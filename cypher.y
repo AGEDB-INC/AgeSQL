@@ -9,8 +9,10 @@
 #include "fe_utils/conditional.h"                                               
 #include "libpq-fe.h"                                                           
 #include "cypherscan.h"
+#include "settings.h"
 
 #include "fe_utils/psqlscan_int.h"
+extern PsqlSettings pset;
 
 typedef struct yy_buffer_state* YY_BUFFER_STATE;
 
@@ -35,8 +37,8 @@ void yypush_buffer_state(YY_BUFFER_STATE buffer);
 void *yy_scan_string(char const* str);
 bool yyerror(char const* s);
 
-void add_item(MapPair* head, char* exp, char* idt);
-char* get_list(MapPair* head);
+static void list_append(MapPair* list, char* exp, char* idt);
+static char* get_list(MapPair* list);
 void reset_vals(void);
 
 int yylex(void);
@@ -51,7 +53,7 @@ bool rtn = false;
 char* qry;
 char* graph_name;
 
-struct MapPair* rtn_list;
+static struct MapPair* rtn_list = NULL;
 %}
 
 %union {
@@ -85,14 +87,7 @@ statement:
     | statement SEMICOLON
       {      
           if (rtn == false)
-          {
-              MapPair* temp = (MapPair*) malloc(sizeof(MapPair)); 
-              temp->exp = "v";
-              temp->idt = NULL;
-              
-              rtn_list->exp = temp->exp;
-              rtn_list->idt = temp->idt;
-          }
+              list_append(rtn_list, 'v', NULL);
           
           YYACCEPT;
       }
@@ -233,22 +228,20 @@ item_clause:
     ;
 
 item_list:
-    item { rtn_list->exp = $1->exp; rtn_list->idt = $1->idt; }
-    | item_list COMMA item { add_item(rtn_list, $3->exp, $3->idt); }
+    item { list_append(rtn_list, $1->exp, $1->idt); }
+    | item_list COMMA item { list_append(rtn_list, $3->exp, $3->idt); }
     ;
 
 item:
     expression
     {
-        $$ = (MapPair*) malloc(sizeof(MapPair)); 
+        $$ = (MapPair*) malloc(sizeof(MapPair));
         $$->exp = $1;
         $$->idt = NULL;
     }
     | expression AS IDENTIFIER
     {
-        $$ = (MapPair*) malloc(sizeof(MapPair));
-        $$->exp = $1;
-        $$->idt = $3;
+        list_append(rtn_list, $1, $3);
     }
     ;
 
@@ -290,95 +283,86 @@ bool yyerror(char const* s)
     return false;
 }
 
-void add_item(MapPair* head, char* exp, char* idt)
+void
+list_append(MapPair* list, char* exp, char* idt)
 {
-    struct MapPair* current = head;
-    while (current->next != NULL) {
-        current = current->next;
-    }
-
-    /* now we can add a new variable */
-    current->next = (MapPair*) malloc(sizeof(MapPair));
-    current->next->exp = exp;
-    current->next->idt = idt;
-    current->next->next = NULL;
-}
-
-char* get_list(MapPair* head)
-{
-    struct MapPair* current = head;
-
-    char list[1000] = "";
-    char* ptr = list;
-
-    while (current != NULL)
+    MapPair *current = (MapPair*) malloc(sizeof(MapPair));
+    if (list == NULL)
     {
-        char temp[1000] = "";
-
-        if (current->idt != NULL)
-        {
-	    sprintf(temp, "%s agtype%s", current->idt, (current->next != NULL) ? ", " : "");
-            strcat(list, temp);
-        }
-        else
-        {
-            char* temp2 = current->exp;
-            int i = 0;
-
-            while(temp2[i]!='\0')
-            {
-                if(temp2[i]=='.')
-                    temp2[i]='_';
-                i++;
-            }
-
-            sprintf(temp, "%s agtype%s", temp2, (current->next != NULL) ? ", " : "");
-            strcat(list, temp);
-        }
-
-        current = current->next;
+      list = current;
+      current->exp = exp;
+      current->idt = idt;
+      current->next = NULL;
+      return;
     }
-    
-    return ptr;
+    list->next = current;
+    list->next->exp = exp;
+    list->next->idt = idt;
+    list->next->next = NULL;
 }
 
-bool psql_scan_cypher_command(char* data)
+char*
+get_list(MapPair* list)
+{
+  struct MapPair* current = list;
+  char *str = malloc(100);
+  
+  if (list == NULL)
+  {
+    sprintf(str, "a agtype");
+    return str;
+  }
+
+  while (current != NULL)
+  {
+    if (current->idt != NULL)
+      sprintf(str, "%s agtype%s", current->idt, (current->next != NULL) ? ", " : "");
+    
+    current = current->next;
+  }
+  return str;
+}
+
+bool
+psql_scan_cypher_command(char* data)
 {
     YY_BUFFER_STATE buf = yy_scan_string(data);
-    
-    rtn_list = (MapPair*) malloc(sizeof(MapPair));
-    
     yypush_buffer_state(buf);
     yyparse();
 
     return true;
 }
 
-char* convert_to_psql_command(char* data)
+char*
+convert_to_psql_command(char* data)
 {
-    char temp[1000] = "";
-    
-    /* remove semicolon from query */
-    data[strlen(data)-1] = '\0';
+  char temp[1000] = "";
+  char* qry = NULL;
 
-    sprintf(temp,
-        "SELECT * "
-        "FROM cypher('%s', $$ "
-        "%s "
-        "$$) AS (%s);",
-        graph_name, data, get_list(rtn_list));
-    qry = temp;
+  /* Remove semicolon from query */
+  data[strlen(data) - 1] = '\0';
 
-    printf("SENDING: %s\n", qry);
+  snprintf(temp, sizeof(temp),
+             "SELECT * "
+             "FROM cypher('%s', $$ "
+             "%s "
+             "$$) AS (%s);",
+             graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
 
-    reset_vals();
+  qry = strdup(temp);
 
-    return qry;
+  /* Print debug information */
+  printf("\nINFO: %s\n", qry);
+
+  reset_vals();
+
+  return qry;
 }
 
 void reset_vals(void)
 {
-    free(rtn_list);
+    if (rtn_list)
+      free(rtn_list);
 
     match = false;
     where = false;

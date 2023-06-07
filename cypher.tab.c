@@ -78,8 +78,10 @@
 #include "fe_utils/conditional.h"                                               
 #include "libpq-fe.h"                                                           
 #include "cypherscan.h"
+#include "settings.h"
 
 #include "fe_utils/psqlscan_int.h"
+extern PsqlSettings pset;
 
 typedef struct yy_buffer_state* YY_BUFFER_STATE;
 
@@ -104,8 +106,8 @@ void yypush_buffer_state(YY_BUFFER_STATE buffer);
 void *yy_scan_string(char const* str);
 bool yyerror(char const* s);
 
-void add_item(MapPair* head, char* exp, char* idt);
-char* get_list(MapPair* head);
+static void list_append(MapPair* list, char* exp, char* idt);
+static char* get_list(MapPair* list);
 void reset_vals(void);
 
 int yylex(void);
@@ -120,9 +122,9 @@ bool rtn = false;
 char* qry;
 char* graph_name;
 
-struct MapPair* rtn_list;
+static struct MapPair* rtn_list = NULL;
 
-#line 126 "cypher.tab.c"
+#line 128 "cypher.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -215,7 +217,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 57 "cypher.y"
+#line 59 "cypher.y"
 
     char* str_val;
     int int_val;
@@ -223,7 +225,7 @@ union YYSTYPE
     struct EdgePattern* pat;
     struct MapPair* pair;
 
-#line 227 "cypher.tab.c"
+#line 229 "cypher.tab.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -602,14 +604,14 @@ static const yytype_int8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,    83,    83,    84,    85,   102,   103,   104,   105,   109,
-     109,   113,   114,   118,   123,   124,   128,   129,   133,   134,
-     138,   139,   140,   144,   148,   149,   153,   154,   158,   159,
-     163,   164,   168,   169,   173,   174,   178,   179,   183,   184,
-     188,   192,   193,   194,   198,   198,   202,   203,   207,   208,
-     212,   213,   214,   218,   219,   220,   224,   224,   228,   228,
-     232,   236,   237,   241,   247,   255,   257,   261,   262,   266,
-     270,   271,   272,   275,   277,   280,   282
+       0,    85,    85,    86,    87,    97,    98,    99,   100,   104,
+     104,   108,   109,   113,   118,   119,   123,   124,   128,   129,
+     133,   134,   135,   139,   143,   144,   148,   149,   153,   154,
+     158,   159,   163,   164,   168,   169,   173,   174,   178,   179,
+     183,   187,   188,   189,   193,   193,   197,   198,   202,   203,
+     207,   208,   209,   213,   214,   215,   219,   219,   223,   223,
+     227,   231,   232,   236,   242,   248,   250,   254,   255,   259,
+     263,   264,   265,   268,   270,   273,   275
 };
 #endif
 
@@ -1480,327 +1482,318 @@ yyreduce:
   switch (yyn)
     {
   case 4:
-#line 86 "cypher.y"
+#line 88 "cypher.y"
       {      
           if (rtn == false)
-          {
-              MapPair* temp = (MapPair*) malloc(sizeof(MapPair)); 
-              temp->exp = "v";
-              temp->idt = NULL;
-              
-              rtn_list->exp = temp->exp;
-              rtn_list->idt = temp->idt;
-          }
+              list_append(rtn_list, 'v', NULL);
           
           YYACCEPT;
       }
-#line 1498 "cypher.tab.c"
+#line 1493 "cypher.tab.c"
     break;
 
   case 9:
-#line 109 "cypher.y"
+#line 104 "cypher.y"
           { match = true; }
-#line 1504 "cypher.tab.c"
+#line 1499 "cypher.tab.c"
     break;
 
   case 10:
-#line 109 "cypher.y"
+#line 104 "cypher.y"
                                                        { graph_name = (yyvsp[0].str_val); }
-#line 1510 "cypher.tab.c"
+#line 1505 "cypher.tab.c"
     break;
 
   case 14:
-#line 123 "cypher.y"
+#line 118 "cypher.y"
                 { (yyval.str_val) = NULL; }
-#line 1516 "cypher.tab.c"
+#line 1511 "cypher.tab.c"
     break;
 
   case 15:
-#line 124 "cypher.y"
+#line 119 "cypher.y"
                  { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1522 "cypher.tab.c"
+#line 1517 "cypher.tab.c"
     break;
 
   case 16:
-#line 128 "cypher.y"
+#line 123 "cypher.y"
                 { (yyval.str_val) = NULL; }
-#line 1528 "cypher.tab.c"
+#line 1523 "cypher.tab.c"
     break;
 
   case 17:
-#line 129 "cypher.y"
+#line 124 "cypher.y"
                        { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1534 "cypher.tab.c"
+#line 1529 "cypher.tab.c"
     break;
 
   case 18:
-#line 133 "cypher.y"
+#line 128 "cypher.y"
                 { (yyval.pair) = NULL; }
-#line 1540 "cypher.tab.c"
+#line 1535 "cypher.tab.c"
     break;
 
   case 19:
-#line 134 "cypher.y"
+#line 129 "cypher.y"
                                 { (yyval.pair) = (yyvsp[-1].pair); }
-#line 1546 "cypher.tab.c"
+#line 1541 "cypher.tab.c"
     break;
 
   case 20:
-#line 138 "cypher.y"
+#line 133 "cypher.y"
                           { rel_direction = 0; }
-#line 1552 "cypher.tab.c"
+#line 1547 "cypher.tab.c"
     break;
 
   case 21:
-#line 139 "cypher.y"
+#line 134 "cypher.y"
                                { rel_direction = -1; }
-#line 1558 "cypher.tab.c"
+#line 1553 "cypher.tab.c"
     break;
 
   case 22:
-#line 140 "cypher.y"
+#line 135 "cypher.y"
                                { rel_direction = 1; }
-#line 1564 "cypher.tab.c"
+#line 1559 "cypher.tab.c"
     break;
 
   case 24:
-#line 148 "cypher.y"
+#line 143 "cypher.y"
                 { (yyval.str_val) = NULL; }
-#line 1570 "cypher.tab.c"
+#line 1565 "cypher.tab.c"
     break;
 
   case 25:
-#line 149 "cypher.y"
+#line 144 "cypher.y"
                  { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1576 "cypher.tab.c"
+#line 1571 "cypher.tab.c"
     break;
 
   case 26:
-#line 153 "cypher.y"
+#line 148 "cypher.y"
                 { (yyval.str_val) = NULL; }
-#line 1582 "cypher.tab.c"
+#line 1577 "cypher.tab.c"
     break;
 
   case 27:
-#line 154 "cypher.y"
+#line 149 "cypher.y"
                        { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1588 "cypher.tab.c"
+#line 1583 "cypher.tab.c"
     break;
 
   case 28:
-#line 158 "cypher.y"
+#line 153 "cypher.y"
                 { (yyval.pat) = NULL; }
-#line 1594 "cypher.tab.c"
+#line 1589 "cypher.tab.c"
     break;
 
   case 29:
-#line 159 "cypher.y"
+#line 154 "cypher.y"
                                { (yyval.pat) = (yyvsp[0].pat); }
-#line 1600 "cypher.tab.c"
+#line 1595 "cypher.tab.c"
     break;
 
   case 30:
-#line 163 "cypher.y"
+#line 158 "cypher.y"
                 { (yyval.pat) = NULL; }
-#line 1606 "cypher.tab.c"
+#line 1601 "cypher.tab.c"
     break;
 
   case 31:
-#line 164 "cypher.y"
+#line 159 "cypher.y"
                                       { (yyval.pat)->lower = (yyvsp[-2].int_val); (yyval.pat)->dot = (yyvsp[-1].bool_val); (yyval.pat)->upper = (yyvsp[0].int_val); }
-#line 1612 "cypher.tab.c"
+#line 1607 "cypher.tab.c"
     break;
 
   case 32:
-#line 168 "cypher.y"
+#line 163 "cypher.y"
                 { (yyval.bool_val) = false; }
-#line 1618 "cypher.tab.c"
+#line 1613 "cypher.tab.c"
     break;
 
   case 33:
-#line 169 "cypher.y"
+#line 164 "cypher.y"
               { (yyval.bool_val) = true; }
-#line 1624 "cypher.tab.c"
+#line 1619 "cypher.tab.c"
     break;
 
   case 34:
-#line 173 "cypher.y"
+#line 168 "cypher.y"
                 { (yyval.int_val) = 0; }
-#line 1630 "cypher.tab.c"
+#line 1625 "cypher.tab.c"
     break;
 
   case 35:
-#line 174 "cypher.y"
+#line 169 "cypher.y"
               { (yyval.int_val) = (yyvsp[0].int_val); }
-#line 1636 "cypher.tab.c"
+#line 1631 "cypher.tab.c"
     break;
 
   case 36:
-#line 178 "cypher.y"
+#line 173 "cypher.y"
                 { (yyval.pair) = NULL; }
-#line 1642 "cypher.tab.c"
+#line 1637 "cypher.tab.c"
     break;
 
   case 37:
-#line 179 "cypher.y"
+#line 174 "cypher.y"
                            { (yyval.pair) = (yyvsp[0].pair); }
-#line 1648 "cypher.tab.c"
+#line 1643 "cypher.tab.c"
     break;
 
   case 38:
-#line 183 "cypher.y"
+#line 178 "cypher.y"
               { (yyval.pair) = (yyvsp[0].pair); }
-#line 1654 "cypher.tab.c"
+#line 1649 "cypher.tab.c"
     break;
 
   case 39:
-#line 184 "cypher.y"
+#line 179 "cypher.y"
                                            { (yyval.pair) = (yyvsp[0].pair); }
-#line 1660 "cypher.tab.c"
+#line 1655 "cypher.tab.c"
     break;
 
   case 40:
-#line 188 "cypher.y"
+#line 183 "cypher.y"
                                 { (yyval.pair)->idt = (yyvsp[-2].str_val); (yyval.pair)->exp = (yyvsp[0].str_val); }
-#line 1666 "cypher.tab.c"
+#line 1661 "cypher.tab.c"
     break;
 
   case 41:
-#line 192 "cypher.y"
+#line 187 "cypher.y"
             { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", (yyvsp[0].int_val)); (yyval.str_val) = temp; }
-#line 1672 "cypher.tab.c"
+#line 1667 "cypher.tab.c"
     break;
 
   case 42:
-#line 193 "cypher.y"
+#line 188 "cypher.y"
              { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1678 "cypher.tab.c"
+#line 1673 "cypher.tab.c"
     break;
 
   case 43:
-#line 194 "cypher.y"
+#line 189 "cypher.y"
                  { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1684 "cypher.tab.c"
+#line 1679 "cypher.tab.c"
     break;
 
   case 44:
-#line 198 "cypher.y"
+#line 193 "cypher.y"
           { where = true; }
-#line 1690 "cypher.tab.c"
+#line 1685 "cypher.tab.c"
     break;
 
   case 48:
-#line 207 "cypher.y"
+#line 202 "cypher.y"
                 { (yyval.bool_val) = 0; }
-#line 1696 "cypher.tab.c"
+#line 1691 "cypher.tab.c"
     break;
 
   case 49:
-#line 208 "cypher.y"
+#line 203 "cypher.y"
           { (yyval.bool_val) = 1; }
-#line 1702 "cypher.tab.c"
+#line 1697 "cypher.tab.c"
     break;
 
   case 50:
-#line 212 "cypher.y"
+#line 207 "cypher.y"
                { (yyval.str_val) = (yyvsp[0].str_val); }
-#line 1708 "cypher.tab.c"
+#line 1703 "cypher.tab.c"
     break;
 
   case 51:
-#line 213 "cypher.y"
+#line 208 "cypher.y"
          { (yyval.str_val) = "<"; }
-#line 1714 "cypher.tab.c"
+#line 1709 "cypher.tab.c"
     break;
 
   case 52:
-#line 214 "cypher.y"
+#line 209 "cypher.y"
          { (yyval.str_val) = ">"; }
-#line 1720 "cypher.tab.c"
+#line 1715 "cypher.tab.c"
     break;
 
   case 53:
-#line 218 "cypher.y"
+#line 213 "cypher.y"
         { (yyval.str_val) = "AND"; }
-#line 1726 "cypher.tab.c"
+#line 1721 "cypher.tab.c"
     break;
 
   case 54:
-#line 219 "cypher.y"
+#line 214 "cypher.y"
          { (yyval.str_val) = "OR"; }
-#line 1732 "cypher.tab.c"
+#line 1727 "cypher.tab.c"
     break;
 
   case 55:
-#line 220 "cypher.y"
+#line 215 "cypher.y"
           { (yyval.str_val) = "XOR"; }
-#line 1738 "cypher.tab.c"
+#line 1733 "cypher.tab.c"
     break;
 
   case 56:
-#line 224 "cypher.y"
+#line 219 "cypher.y"
          { with = true; }
-#line 1744 "cypher.tab.c"
+#line 1739 "cypher.tab.c"
     break;
 
   case 58:
-#line 228 "cypher.y"
+#line 223 "cypher.y"
            { rtn = true; }
-#line 1750 "cypher.tab.c"
+#line 1745 "cypher.tab.c"
     break;
 
   case 61:
-#line 236 "cypher.y"
-         { rtn_list->exp = (yyvsp[0].pair)->exp; rtn_list->idt = (yyvsp[0].pair)->idt; }
-#line 1756 "cypher.tab.c"
+#line 231 "cypher.y"
+         { list_append(rtn_list, (yyvsp[0].pair)->exp, (yyvsp[0].pair)->idt); }
+#line 1751 "cypher.tab.c"
     break;
 
   case 62:
-#line 237 "cypher.y"
-                           { add_item(rtn_list, (yyvsp[0].pair)->exp, (yyvsp[0].pair)->idt); }
-#line 1762 "cypher.tab.c"
+#line 232 "cypher.y"
+                           { list_append(rtn_list, (yyvsp[0].pair)->exp, (yyvsp[0].pair)->idt); }
+#line 1757 "cypher.tab.c"
     break;
 
   case 63:
-#line 242 "cypher.y"
+#line 237 "cypher.y"
     {
-        (yyval.pair) = (MapPair*) malloc(sizeof(MapPair)); 
+        (yyval.pair) = (MapPair*) malloc(sizeof(MapPair));
         (yyval.pair)->exp = (yyvsp[0].str_val);
         (yyval.pair)->idt = NULL;
     }
-#line 1772 "cypher.tab.c"
+#line 1767 "cypher.tab.c"
     break;
 
   case 64:
-#line 248 "cypher.y"
+#line 243 "cypher.y"
     {
-        (yyval.pair) = (MapPair*) malloc(sizeof(MapPair));
-        (yyval.pair)->exp = (yyvsp[-2].str_val);
-        (yyval.pair)->idt = (yyvsp[0].str_val);
+        list_append(rtn_list, (yyvsp[-2].str_val), (yyvsp[0].str_val));
     }
-#line 1782 "cypher.tab.c"
+#line 1775 "cypher.tab.c"
     break;
 
   case 70:
-#line 270 "cypher.y"
+#line 263 "cypher.y"
                 { (yyval.int_val) = 1; }
-#line 1788 "cypher.tab.c"
+#line 1781 "cypher.tab.c"
     break;
 
   case 71:
-#line 271 "cypher.y"
+#line 264 "cypher.y"
           { (yyval.int_val) = 1; }
-#line 1794 "cypher.tab.c"
+#line 1787 "cypher.tab.c"
     break;
 
   case 72:
-#line 272 "cypher.y"
+#line 265 "cypher.y"
            { (yyval.int_val) = -1; }
-#line 1800 "cypher.tab.c"
+#line 1793 "cypher.tab.c"
     break;
 
 
-#line 1804 "cypher.tab.c"
+#line 1797 "cypher.tab.c"
 
       default: break;
     }
@@ -2032,7 +2025,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 284 "cypher.y"
+#line 277 "cypher.y"
 
 
 bool yyerror(char const* s)
@@ -2042,95 +2035,86 @@ bool yyerror(char const* s)
     return false;
 }
 
-void add_item(MapPair* head, char* exp, char* idt)
+void
+list_append(MapPair* list, char* exp, char* idt)
 {
-    struct MapPair* current = head;
-    while (current->next != NULL) {
-        current = current->next;
-    }
-
-    /* now we can add a new variable */
-    current->next = (MapPair*) malloc(sizeof(MapPair));
-    current->next->exp = exp;
-    current->next->idt = idt;
-    current->next->next = NULL;
-}
-
-char* get_list(MapPair* head)
-{
-    struct MapPair* current = head;
-
-    char list[1000] = "";
-    char* ptr = list;
-
-    while (current != NULL)
+    MapPair *current = (MapPair*) malloc(sizeof(MapPair));
+    if (list == NULL)
     {
-        char temp[1000] = "";
-
-        if (current->idt != NULL)
-        {
-	    sprintf(temp, "%s agtype%s", current->idt, (current->next != NULL) ? ", " : "");
-            strcat(list, temp);
-        }
-        else
-        {
-            char* temp2 = current->exp;
-            int i = 0;
-
-            while(temp2[i]!='\0')
-            {
-                if(temp2[i]=='.')
-                    temp2[i]='_';
-                i++;
-            }
-
-            sprintf(temp, "%s agtype%s", temp2, (current->next != NULL) ? ", " : "");
-            strcat(list, temp);
-        }
-
-        current = current->next;
+      list = current;
+      current->exp = exp;
+      current->idt = idt;
+      current->next = NULL;
+      return;
     }
-    
-    return ptr;
+    list->next = current;
+    list->next->exp = exp;
+    list->next->idt = idt;
+    list->next->next = NULL;
 }
 
-bool psql_scan_cypher_command(char* data)
+char*
+get_list(MapPair* list)
+{
+  struct MapPair* current = list;
+  char *str = malloc(100);
+  
+  if (list == NULL)
+  {
+    sprintf(str, "a agtype");
+    return str;
+  }
+
+  while (current != NULL)
+  {
+    if (current->idt != NULL)
+      sprintf(str, "%s agtype%s", current->idt, (current->next != NULL) ? ", " : "");
+    
+    current = current->next;
+  }
+  return str;
+}
+
+bool
+psql_scan_cypher_command(char* data)
 {
     YY_BUFFER_STATE buf = yy_scan_string(data);
-    
-    rtn_list = (MapPair*) malloc(sizeof(MapPair));
-    
     yypush_buffer_state(buf);
     yyparse();
 
     return true;
 }
 
-char* convert_to_psql_command(char* data)
+char*
+convert_to_psql_command(char* data)
 {
-    char temp[1000] = "";
-    
-    /* remove semicolon from query */
-    data[strlen(data)-1] = '\0';
+  char temp[1000] = "";
+  char* qry = NULL;
 
-    sprintf(temp,
-        "SELECT * "
-        "FROM cypher('%s', $$ "
-        "%s "
-        "$$) AS (%s);",
-        graph_name, data, get_list(rtn_list));
-    qry = temp;
+  /* Remove semicolon from query */
+  data[strlen(data) - 1] = '\0';
 
-    printf("SENDING: %s\n", qry);
+  snprintf(temp, sizeof(temp),
+             "SELECT * "
+             "FROM cypher('%s', $$ "
+             "%s "
+             "$$) AS (%s);",
+             graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
 
-    reset_vals();
+  qry = strdup(temp);
 
-    return qry;
+  /* Print debug information */
+  printf("\nINFO: %s\n", qry);
+
+  reset_vals();
+
+  return qry;
 }
 
 void reset_vals(void)
 {
-    free(rtn_list);
+    if (rtn_list)
+      free(rtn_list);
 
     match = false;
     where = false;
