@@ -10,6 +10,6 @@
 
 #include "fe_utils/psqlscan.h"
 bool psql_scan_cypher_command(char *);
-char *convert_to_psql_command(char *);
+char *convert_to_psql_command(char *, bool is_command);
 
 #endif   /* CYPHERSCAN_H */
