@@ -50,3 +50,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Auto-generated parser files
+cypher.c
+cypher.tab.c
+cypher.tab.h
+lex.backup

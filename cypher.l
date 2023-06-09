@@ -48,6 +48,8 @@
 "OR" { return OR; }
 "XOR" { return XOR; }
 "NOT" { return NOT; }
+"CREATE" { return CREATE; }
+"GRAPH" { return GRAPH; }
 
 [0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
 [a-zA-Z][a-zA-Z0-9_.]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
