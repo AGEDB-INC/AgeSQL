@@ -70,7 +70,7 @@ static struct MapPair* rtn_list = NULL;
 %type <pat> variable_length_edges_opt edge_length_opt
 %type <pair> node_properties_opt map_literal nonempty_map_literal map_entry item_list item
 
-%token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE ASTERISK DOT MATCH ON WHERE WITH ORDER BY SKIP LIMIT RETURN AS AND OR XOR NOT exit_command
+%token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE ASTERISK DOT MATCH ON WHERE WITH ORDER BY SKIP LIMIT RETURN AS AND OR XOR NOT CREATE GRAPH exit_command
 %token <int_val> INTEGER
 %token <str_val> IDENTIFIER STRING COMPARATOR
 %token UNKNOWN
@@ -98,10 +98,16 @@ query:
     | where_clause
     | with_clause
     | return_clause
+    | create_clause
     ;
 
+create_clause:
+    CREATE
+    | GRAPH IDENTIFIER { graph_name = $2; }
+
 match_clause:
-    MATCH { match = true; } path_pattern ON IDENTIFIER { graph_name = $5; }
+    MATCH { match = true; } path_pattern
+    | MATCH { match = true; } path_pattern ON IDENTIFIER { graph_name = $5; }
     ;    
 
 path_pattern:
@@ -333,7 +339,7 @@ psql_scan_cypher_command(char* data)
     return true;
 }
 
-char* convert_to_psql_command(char* data, bool is_command)
+char* convert_to_psql_command(char* data)
 {
     char temp[1000] = "";
     char* qry = NULL;
@@ -341,7 +347,7 @@ char* convert_to_psql_command(char* data, bool is_command)
     /* Remove semicolon from query */
     data[strlen(data) - 1] = '\0';
 
-    if (is_command)
+    if (pg_strncasecmp(data, "MATCH", 5) == 0)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -352,8 +358,6 @@ char* convert_to_psql_command(char* data, bool is_command)
     }
     else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
     {
-        sscanf(data, "CREATE GRAPH %ms;", &graph_name);
-
         snprintf(temp, sizeof(temp),
             "SELECT * "
             "FROM create_graph('%s');",

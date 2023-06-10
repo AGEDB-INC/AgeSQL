@@ -44,7 +44,6 @@ MainLoop(FILE *source)
 	int			added_nl_pos;
 	bool		success;
 	bool		line_saved_in_history;
-        bool            is_command = true;
 	volatile int successResult = EXIT_SUCCESS;
 	volatile backslashResult cypherCmdStatus = PSQL_CMD_UNKNOWN;
 	volatile backslashResult slashCmdStatus = PSQL_CMD_UNKNOWN;
@@ -439,11 +438,9 @@ MainLoop(FILE *source)
 				if (conditional_active(cond_stack))
 				{
 					/* handle cypher match command */
-					if (pg_strncasecmp(query_buf->data, "MATCH", 5) == 0)
+					if (pg_strncasecmp(query_buf->data, "MATCH", 5) == 0 ||
+                                                pg_strncasecmp(query_buf->data, "CREATE", 6) == 0)
 					{
-                                                /* States that this is a Cypher command. This will be used to
-                                                 * convert to the correct psql command */
-                                                is_command = true;
 						cypherCmdStatus = HandleCypherCmds(scan_state,
 											cond_stack,
 											query_buf,
@@ -454,14 +451,9 @@ MainLoop(FILE *source)
 						if (cypherCmdStatus == PSQL_CMD_SEND)
 						{
 							//char *qry = convert_to_psql_command(query_buf->data);
-							success = SendQuery(convert_to_psql_command(query_buf->data, is_command));
+							success = SendQuery(convert_to_psql_command(query_buf->data));
 						}
 					}
-                                        else if (pg_strncasecmp(query_buf->data, "CREATE GRAPH", 12) == 0)
-                                        {                                         
-                                            is_command = false;
-                                            success = SendQuery(convert_to_psql_command(query_buf->data, is_command));						
-                                        }
 					else
 						success = SendQuery(query_buf->data);
 
