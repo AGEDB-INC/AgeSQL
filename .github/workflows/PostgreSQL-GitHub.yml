@@ -83,15 +83,6 @@ jobs:
           sudo make  install
         working-directory: src/AgeSQL
 
-      - name: Load pg_stat_monitor library and Restart Server
-        run: |
-          export PATH="/usr/lib/postgresql/15/bin:$PATH"
-          pg_ctl -D /opt/pgsql/data -l logfile stop
-          echo "shared_preload_libraries = 'AgeSQL'" >> \
-            /opt/pgsql/data/postgresql.conf
-          pg_ctl -D /opt/pgsql/data -l logfile start
-        working-directory: src/AgeSQL
-
       - name: Start AgeSQL
         run: |
           make installcheck
