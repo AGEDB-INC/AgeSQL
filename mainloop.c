@@ -439,7 +439,9 @@ MainLoop(FILE *source)
 				{
 					/* handle cypher match command */
 					if (pg_strncasecmp(query_buf->data, "MATCH", 5) == 0 ||
-                                                pg_strncasecmp(query_buf->data, "CREATE", 6) == 0)
+							pg_strncasecmp(query_buf->data, "OPTIONAL", 8) == 0 ||
+							pg_strncasecmp(query_buf->data, "EXPLAIN", 7) == 0 ||
+							pg_strncasecmp(query_buf->data, "CREATE", 6) == 0)
 					{
 						cypherCmdStatus = HandleCypherCmds(scan_state,
 											cond_stack,

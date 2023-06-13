@@ -31,30 +31,55 @@
 "}" { return RBRACE; }
 "*" { return ASTERISK; }
 "." { return DOT; }
+"+" { return PLUS; }
+"/" { return SLASH; }
+"=" { return EQUALS; }
+"$" { return DOLLAR; }
 
-"MATCH" { return MATCH; }
-"ON" { return ON; }
-"WHERE" { return WHERE; }
-"WITH" { return WITH; }
-"ORDER" { return ORDER; }
-"BY" { return BY; }
-"SKIP" { return SKIP; }
-"LIMIT" { return LIMIT; }
-"RETURN" { return RETURN; }
-"ASC" { return ASC; }
-"DESC" { return DESC; }
-"AS" { return AS; }
-"AND" { return AND; }
-"OR" { return OR; }
-"XOR" { return XOR; }
-"NOT" { return NOT; }
-"CREATE" { return CREATE; }
-"GRAPH" { return GRAPH; }
+"OPTIONAL"|"optional" { return OPTIONAL; }
+"MATCH"|"match" { return MATCH; }
+"ONLY"|"only" { return ONLY; }
+"ON"|"on" { return ON; }
+"CREATE"|"create" { return CREATE; }
+"GRAPH"|"graph" { return GRAPH; }
+"EXPLAIN"|"explain" { return EXPLAIN; }
+"MERGE"|"merge" { return MERGE; }
+"LOAD"|"load" { return LOAD; }
+"UNWIND"|"unwind" { return UNWIND; }
+"WHERE"|"where" { return WHERE; }
+"EXISTS"|"exists" { return EXISTS; }
+"WITH"|"with" { return WITH; }
+"ORDER"|"order" { return ORDER; }
+"BY"|"by" { return BY; }
+"SKIP"|"skip" { return SKIP; }
+"LIMIT"|"limit" { return LIMIT; }
+"DELETE"|"delete" { return DELETE; }
+"DETACH"|"detach" { return DETACH; }
+"SET"|"set" { return SET; }
+"REMOVE"|"remove" { return REMOVE; }
+"RETURN"|"return" { return RETURN; }
+"DISTINCT"|"distinct" { return DISTINCT; }
+"ASC"|"asc" { return ASC; }
+"DESC"|"desc" { return DESC; }
+"AS"|"as" { return AS; }
+"AND"|"and" { return AND; }
+"OR"|"or" { return OR; }
+"XOR"|"xor" { return XOR; }
+"TRUE"|"true" { return TRUE; }
+"FALSE"|"false" { return FALSE; }
+"IS"|"is" { return IS; }
+"NOT"|"not" { return NOT; }
+"NULL"|"null" { return NUL; }
+"UNION"|"union" { return UNION; }
+"ALL"|"all" { return ALL; }
+"SELECT"|"select" { return SELECT; }
+"FROM"|"from" { return FROM; }
 
 [0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
+[0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
 [a-zA-Z][a-zA-Z0-9_.]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
 ("\"")[^"]*("\"")|("\'")[^']*("\'") { yylval.str_val = strdup(yytext); return STRING; }
-("=")|("!=")|("<=")|(">=")|("<")|(">") { yylval.str_val = strdup(yytext); return COMPARATOR; }
+("=")|("!=")|("<=")|(">=")|("<")|(">")|("<>") { yylval.str_val = strdup(yytext); return COMPARATOR; }
 . { return UNKNOWN; }
 %%
 

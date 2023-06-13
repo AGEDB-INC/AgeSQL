@@ -19,6 +19,7 @@ typedef struct yy_buffer_state* YY_BUFFER_STATE;
 typedef struct {
     char* str_val;
     int int_val;
+    float float_val;
 } yyval;
 
 typedef struct EdgePattern {
@@ -59,19 +60,24 @@ static struct MapPair* rtn_list = NULL;
 %union {
     char* str_val;
     int int_val;
+    float float_val;
     bool bool_val;
     struct EdgePattern* pat;
     struct MapPair* pair;
 }
 
-%type <str_val> node_alias_opt node_labels_opt expression rel_alias_opt rel_labels_opt compare logic
+%type <str_val> node_alias_opt node_labels_opt expression function rel_alias_opt rel_labels_opt compare logic
 %type <int_val> upper_bound_opt sort_direction_opt
-%type <bool_val> dot_opt not_opt
+%type <bool_val> dot_opt
 %type <pat> variable_length_edges_opt edge_length_opt
 %type <pair> node_properties_opt map_literal nonempty_map_literal map_entry item_list item
 
-%token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE ASTERISK DOT MATCH ON WHERE WITH ORDER BY SKIP LIMIT RETURN AS AND OR XOR NOT CREATE GRAPH exit_command
+%token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
+    ASTERISK DOT PLUS SLASH EQUALS DOLLAR OPTIONAL MATCH ONLY ON CREATE GRAPH EXPLAIN MERGE LOAD
+    UNWIND WHERE EXISTS WITH ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN DISTINCT AS AND OR
+    XOR TRUE FALSE UNION ALL IS NOT NUL SELECT FROM
 %token <int_val> INTEGER
+%token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING COMPARATOR
 %token UNKNOWN
 
@@ -87,7 +93,7 @@ statement:
     | statement SEMICOLON
       {      
           if (rtn == false)
-              list_append(rtn_list, 'v', NULL);
+              list_append(rtn_list, "v", NULL);
           
           YYACCEPT;
       }
@@ -95,20 +101,54 @@ statement:
 
 query:
     match_clause
-    | where_clause
-    | with_clause
-    | return_clause
+    | on_clause
     | create_clause
+    | explain_clause
+    | merge_clause
+    | load_clause
+    | unwind_clause
+    | where_clause
+    | exists_clause
+    | with_clause
+    | delete_clause
+    | set_clause
+    | remove_clause
+    | return_clause
+    ;
+
+on_clause:
+    ON CREATE
+    | ON MATCH
+    | ON IDENTIFIER { graph_name = $2; }
     ;
 
 create_clause:
     CREATE
+    | CREATE pattern_list
     | GRAPH IDENTIFIER { graph_name = $2; }
+    ;
+
+explain_clause:
+    EXPLAIN LPAREN 'VERBOSE' COMMA 'COSTS OFF' RPAREN
 
 match_clause:
-    MATCH { match = true; } path_pattern
-    | MATCH { match = true; } path_pattern ON IDENTIFIER { graph_name = $5; }
-    ;    
+    optional_opt MATCH { match = true; } pattern_list
+    ;
+
+optional_opt:
+    /* empty */
+    | OPTIONAL
+    ;
+
+pattern_list:
+    assign_to_variable_opt path_pattern
+    | pattern_list COMMA assign_to_variable_opt path_pattern
+    ;
+
+assign_to_variable_opt:
+    /* empty */
+    | IDENTIFIER EQUALS
+    ;
 
 path_pattern:
     node_pattern
@@ -116,8 +156,8 @@ path_pattern:
     ;
 
 node_pattern:
-    LPAREN node_alias_opt node_labels_opt
-    node_properties_opt RPAREN
+    LPAREN node_alias_opt node_labels_opt node_properties_opt only_opt dollar_opt RPAREN
+    | LPAREN IDENTIFIER compare expression only_opt RPAREN
     ;
 
 node_alias_opt:
@@ -135,6 +175,16 @@ node_properties_opt:
     | LBRACE map_literal RBRACE { $$ = $2; }
     ;
 
+only_opt:
+    /* empty */
+    | ONLY
+    ;
+
+dollar_opt:
+    /* empty */
+    | DOLLAR IDENTIFIER
+    ;
+
 edge_pattern:
     DASH rel_pattern DASH { rel_direction = 0; }
     | LT DASH rel_pattern DASH { rel_direction = -1; }
@@ -142,7 +192,8 @@ edge_pattern:
     ;
 
 rel_pattern:
-    LBRACKET rel_alias_opt rel_labels_opt variable_length_edges_opt RBRACKET
+    LBRACKET rel_alias_opt rel_labels_opt only_opt variable_length_edges_opt node_properties_opt RBRACKET
+    | LBRACKET IDENTIFIER compare expression only_opt RBRACKET
     ;
 
 rel_alias_opt:
@@ -152,7 +203,12 @@ rel_alias_opt:
 
 rel_labels_opt:
     /* empty */ { $$ = NULL; }
-    | COLON IDENTIFIER { $$ = $2; }
+    | COLON IDENTIFIER pipe_opt { $$ = $2; } 
+    ;
+
+pipe_opt:
+    /* empty */
+    | PIPE IDENTIFIER
     ;
 
 variable_length_edges_opt:
@@ -189,28 +245,104 @@ map_entry:
     IDENTIFIER COLON expression { $$->idt = $1; $$->exp = $3; }
     ;
 
+expression_list:
+    expression
+    | expression_list COMMA expression
+    ;
+
 expression:
-    INTEGER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
-    | STRING { $$ = $1; }
-    | IDENTIFIER { $$ = $1; }
+    NUL { $$ = NULL; }
+    | INTEGER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
+    | FLOAT { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $1); $$ = temp; }
+    | STRING array_opt dot_operator_opt { $$ = $1; }
+    | IDENTIFIER array_opt dot_operator_opt { $$ = $1; }
+    | LBRACKET list RBRACKET { $$ = "list"; }
+    | LBRACE map_literal RBRACE { $$ = "property"; }
+    | LPAREN sql_statement RPAREN { $$ = "sql"; }
+    | function dot_operator_opt { $$ = $1 }
+    | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
+    ;
+
+dot_operator_opt:
+    /* empty */
+    | DOT IDENTIFIER
+
+array_opt:
+    /* empty */
+    | LBRACKET expression RBRACKET
+    ;
+
+list:
+    /* empty */
+    | expression
+    | list COMMA expression
+    ;
+
+function:
+    IDENTIFIER LPAREN expression_list RPAREN { $$ = $1; }
+    | IDENTIFIER LPAREN path_pattern RPAREN { $$ = $1; }
+    | IDENTIFIER LPAREN ASTERISK RPAREN { $$ = $1; }
+    ;
+
+math_expression:
+    expression
+    | math_expression EQUALS expression
+    | math_expression PLUS equals_opt expression
+    | math_expression DASH equals_opt expression
+    | math_expression ASTERISK equals_opt expression
+    | math_expression SLASH equals_opt expression
+    ;
+
+equals_opt:
+    /* empty */
+    | EQUALS
+    ;
+
+merge_clause:
+    MERGE path_pattern
+    ;
+
+load_clause:
+    LOAD FROM IDENTIFIER
+    | LOAD FROM IDENTIFIER AS IDENTIFIER
+    ;
+
+unwind_clause:
+    UNWIND expression AS IDENTIFIER
     ;
 
 where_clause:
-    WHERE { where = true; } where_expression
+    WHERE { where = true; } not_opt where_expression
     ;
 
 where_expression:
-    not_opt expression compare expression
+    expression compare expression
+    | expression IS not_opt expression
+    | exists_clause
+    | function
+    | boolean
     | where_expression logic not_opt expression compare expression
+    | where_expression logic not_opt expression IS not_opt expression
+    | where_expression logic not_opt exists_clause
+    | where_expression logic not_opt function
+    | where_expression logic not_opt boolean
+    ;
+
+exists_clause:
+    EXISTS LPAREN expression RPAREN
+    | EXISTS LPAREN path_pattern RPAREN
+    | exists_clause COMMA expression
+    | exists_clause COMMA path_pattern
     ;
 
 not_opt:
-    /* empty */ { $$ = 0; }
-    | NOT { $$ = 1; }
+    /* empty */
+    | NOT
     ;
 
 compare:
-    COMPARATOR { $$ = $1; }
+    EQUALS { $$ = "="; }
+    | COMPARATOR { $$ = $1; }
     | LT { $$ = "<"; }
     | GT { $$ = ">"; }
     ;
@@ -221,12 +353,47 @@ logic:
     | XOR { $$ = "XOR"; }
     ;
 
+boolean:
+    TRUE
+    | FALSE
+    ;
+
 with_clause:
     WITH { with = true; } item_clause
+    | WITH { with = true; } ASTERISK
+    ;
+
+delete_clause:
+    detach_opt DELETE expression_list
+    ;
+
+detach_opt:
+    /* empty */
+    | DETACH
+    ;
+
+set_clause:
+    SET assign_list
+    ;
+
+assign_list:
+    math_expression
+    | assign_list COMMA math_expression
+    ;
+
+remove_clause:
+    REMOVE expression_list
     ;
 
 return_clause:
-    RETURN { rtn = true; } item_clause
+    RETURN distinct_opt { rtn = true; } item_clause union_opt
+    | RETURN { rtn = true; } ASTERISK union_opt
+    | RETURN { rtn = true; } not_opt exists_clause union_opt
+    ;
+
+distinct_opt:
+    /* empty */
+    | DISTINCT
     ;
 
 item_clause:
@@ -246,9 +413,17 @@ item:
         $$->idt = NULL;
     }
     | expression AS IDENTIFIER
-    {
-        list_append(rtn_list, $1, $3);
-    }
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          $$->exp = $1;
+          $$->idt = $3;
+      }
+    | expression EQUALS expression AS IDENTIFIER
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          $$->exp = NULL;
+          $$->idt = $5;
+      }
     ;
 
 order_clause_opt:
@@ -279,6 +454,31 @@ skip_clause_opt:
 limit_clause_opt:
     /* empty */
     | LIMIT INTEGER
+    ;
+
+union_opt:
+    /* empty */
+    | UNION
+    | UNION ALL
+    ;
+
+sql_statement:
+    sql_query
+    | sql_statement sql_query
+    ;
+
+sql_query:
+    select_clause
+    | from_clause
+    | where_clause
+    ;
+
+select_clause:
+    SELECT expression
+    ;
+
+from_clause:
+    FROM IDENTIFIER
     ;
 %%
 
