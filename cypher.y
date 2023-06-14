@@ -50,6 +50,8 @@ bool match = false;
 bool where = false;
 bool with = false;
 bool rtn = false;
+bool create = false;
+bool create_graph = false;
 
 char* qry;
 char* graph_name;
@@ -123,13 +125,13 @@ on_clause:
     ;
 
 create_clause:
-    CREATE
-    | CREATE pattern_list
-    | GRAPH IDENTIFIER { graph_name = $2; }
+    CREATE { create = true; }
+    | CREATE { create = true; } pattern_list
+    | CREATE GRAPH IDENTIFIER { graph_name = $3; create_graph = true; }
     ;
 
 explain_clause:
-    EXPLAIN LPAREN 'VERBOSE' COMMA 'COSTS OFF' RPAREN
+    EXPLAIN LPAREN "VERBOSE" COMMA "COSTS OFF" RPAREN
 
 match_clause:
     optional_opt MATCH { match = true; } pattern_list
@@ -243,6 +245,7 @@ nonempty_map_literal:
 
 map_entry:
     IDENTIFIER COLON expression { $$->idt = $1; $$->exp = $3; }
+    | IDENTIFIER COLON math_expression { $$->idt = $1; }
     ;
 
 expression_list:
@@ -259,13 +262,14 @@ expression:
     | LBRACKET list RBRACKET { $$ = "list"; }
     | LBRACE map_literal RBRACE { $$ = "property"; }
     | LPAREN sql_statement RPAREN { $$ = "sql"; }
-    | function dot_operator_opt { $$ = $1 }
+    | function dot_operator_opt { $$ = $1; }
     | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
     ;
 
 dot_operator_opt:
     /* empty */
     | DOT IDENTIFIER
+    ;
 
 array_opt:
     /* empty */
@@ -534,7 +538,9 @@ psql_scan_cypher_command(char* data)
 {
     YY_BUFFER_STATE buf = yy_scan_string(data);
     yypush_buffer_state(buf);
-    yyparse();
+
+    if (yyparse())
+        return false;
 
     return true;
 }
@@ -547,7 +553,9 @@ char* convert_to_psql_command(char* data)
     /* Remove semicolon from query */
     data[strlen(data) - 1] = '\0';
 
-    if (pg_strncasecmp(data, "MATCH", 5) == 0)
+    pset.graph_name = getenv("pset.graph_name");
+
+    if (match || create)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -556,7 +564,7 @@ char* convert_to_psql_command(char* data)
             "$$) AS (%s);",
             graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
     }
-    else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
+    else if (create_graph)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -583,4 +591,6 @@ void reset_vals(void)
     where = false;
     with = false;
     rtn = false;
+    create = false;
+    create_graph = false;
 }
