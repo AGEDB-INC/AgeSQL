@@ -46,15 +46,19 @@ int yylex(void);
 int rel_direction = 0; // 1 for "->", -1 for "<-"
 int order_clause_direction = 1; // 1 for ascending, -1 for descending
 
+bool cascade = false;
+bool with_ids = false;
 bool match = false;
 bool where = false;
 bool with = false;
 bool rtn = false;
-bool create = false;
-bool create_graph = false;
 
 char* qry;
 char* graph_name;
+char* alter_graph_name;
+char* label_name;
+char* edge_name;
+char* file_path;
 
 static struct MapPair* rtn_list = NULL;
 %}
@@ -75,9 +79,10 @@ static struct MapPair* rtn_list = NULL;
 %type <pair> node_properties_opt map_literal nonempty_map_literal map_entry item_list item
 
 %token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
-    ASTERISK DOT PLUS SLASH EQUALS DOLLAR OPTIONAL MATCH ONLY ON CREATE GRAPH EXPLAIN MERGE LOAD
-    UNWIND WHERE EXISTS WITH ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN DISTINCT AS AND OR
-    XOR TRUE FALSE UNION ALL IS NOT NUL SELECT FROM
+    ASTERISK DOT PLUS SLASH EQUALS DOLLAR OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL ELABEL INHERITS
+    DROP IF CASCADE ALTER RENAME EXPLAIN MERGE LOAD IDS LABELS EDGES UNWIND WHERE EXISTS WITH ORDER
+    BY SKIP LIMIT  DELETE DETACH SET REMOVE RETURN DISTINCT AS AND OR XOR TRUE FALSE UNION ALL IS
+    NOT NUL SELECT FROM
 %token <int_val> INTEGER
 %token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING COMPARATOR
@@ -105,6 +110,8 @@ query:
     match_clause
     | on_clause
     | create_clause
+    | drop_clause
+    | alter_clause
     | explain_clause
     | merge_clause
     | load_clause
@@ -125,13 +132,41 @@ on_clause:
     ;
 
 create_clause:
-    CREATE { create = true; }
-    | CREATE { create = true; } pattern_list
-    | CREATE GRAPH IDENTIFIER { graph_name = $3; create_graph = true; }
+    CREATE pattern_list
+    | CREATE GRAPH IDENTIFIER { graph_name = $3; }
+    | CREATE VLABEL IDENTIFIER inherits_opt on_clause { label_name = $3; }
+    | CREATE ELABEL IDENTIFIER inherits_opt on_clause { edge_name = $3; }
+    ;
+
+inherits_opt:
+    /* empty */
+    | INHERITS expression
+    ;
+
+drop_clause:
+    DROP GRAPH if_exists_opt IDENTIFIER cascade_opt { graph_name = $4; }
+    ;
+
+if_exists_opt:
+    /* empty */
+    | IF EXISTS
+    ;
+
+cascade_opt:
+    /* empty */
+    | CASCADE { cascade = true; }
+    ;
+
+alter_clause:
+    ALTER GRAPH IDENTIFIER RENAME IDENTIFIER
+    {
+        graph_name = $3; alter_graph_name = $5;
+    }
     ;
 
 explain_clause:
-    EXPLAIN LPAREN "VERBOSE" COMMA "COSTS OFF" RPAREN
+    EXPLAIN LPAREN 'VERBOSE' COMMA 'COSTS OFF' RPAREN
+    ;
 
 match_clause:
     optional_opt MATCH { match = true; } pattern_list
@@ -245,7 +280,6 @@ nonempty_map_literal:
 
 map_entry:
     IDENTIFIER COLON expression { $$->idt = $1; $$->exp = $3; }
-    | IDENTIFIER COLON math_expression { $$->idt = $1; }
     ;
 
 expression_list:
@@ -309,6 +343,19 @@ merge_clause:
 load_clause:
     LOAD FROM IDENTIFIER
     | LOAD FROM IDENTIFIER AS IDENTIFIER
+    | LOAD LABELS with_id_opt IDENTIFIER FROM STRING ON IDENTIFIER
+      {
+          label_name = $4; file_path = $6; graph_name = $8;
+      }
+    | LOAD EDGES IDENTIFIER FROM STRING ON IDENTIFIER
+      {
+          edge_name = $3; file_path = $5; graph_name = $7;
+      }
+    ;
+
+with_id_opt:
+    /* empty */
+    | WITH IDS { with_ids = true; }
     ;
 
 unwind_clause:
@@ -538,9 +585,7 @@ psql_scan_cypher_command(char* data)
 {
     YY_BUFFER_STATE buf = yy_scan_string(data);
     yypush_buffer_state(buf);
-
-    if (yyparse())
-        return false;
+    yyparse();
 
     return true;
 }
@@ -553,9 +598,7 @@ char* convert_to_psql_command(char* data)
     /* Remove semicolon from query */
     data[strlen(data) - 1] = '\0';
 
-    pset.graph_name = getenv("pset.graph_name");
-
-    if (match || create)
+    if (pg_strncasecmp(data, "MATCH", 5) == 0)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -564,12 +607,55 @@ char* convert_to_psql_command(char* data)
             "$$) AS (%s);",
             graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
     }
-    else if (create_graph)
+    else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
             "FROM create_graph('%s');",
             graph_name ? graph_name : pset.graph_name);
+    }
+    else if (pg_strncasecmp(data, "CREATE VLABEL", 13) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM create_vlabel('%s', '%s');",
+            graph_name ? graph_name : pset.graph_name, label_name);
+    }
+    else if (pg_strncasecmp(data, "CREATE ELABEL", 13) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM create_elabel('%s', '%s');",
+            graph_name ? graph_name : pset.graph_name, edge_name);
+    }
+    else if (pg_strncasecmp(data, "DROP GRAPH", 10) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM drop_graph('%s', %s);",
+            graph_name ? graph_name : pset.graph_name, cascade ? "true" : "false");
+    }
+    else if (pg_strncasecmp(data, "ALTER GRAPH", 11) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM alter_graph('%s', 'RENAME', '%s');",
+            graph_name ? graph_name : pset.graph_name, alter_graph_name);
+    }
+    else if (pg_strncasecmp(data, "LOAD LABELS", 11) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM load_labels_from_file('%s', '%s', '%s', %s);",
+            graph_name ? graph_name : pset.graph_name,
+            label_name, file_path, with_ids ? "true" : "false");
+    }
+    else if (pg_strncasecmp(data, "LOAD EDGES", 10) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM load_edges_from_file('%s', '%s', '%s');",
+            graph_name ? graph_name : pset.graph_name, label_name, file_path);
     }
 
     qry = strdup(temp);
@@ -591,6 +677,4 @@ void reset_vals(void)
     where = false;
     with = false;
     rtn = false;
-    create = false;
-    create_graph = false;
 }
