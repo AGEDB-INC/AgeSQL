@@ -39,7 +39,8 @@ void *yy_scan_string(char const* str);
 bool yyerror(char const* s);
 
 static void list_append(MapPair* list, char* exp, char* idt);
-static char* get_list(MapPair* list);
+static char* get_list(MapPair* list, MapPair* list2);
+static void concat_strings(char* str1, char* str2);
 void reset_vals(void);
 
 int yylex(void);
@@ -61,6 +62,7 @@ char* edge_name;
 char* file_path;
 
 static struct MapPair* rtn_list = NULL;
+static struct MapPair* type_list = NULL;
 %}
 
 %union {
@@ -72,7 +74,8 @@ static struct MapPair* rtn_list = NULL;
     struct MapPair* pair;
 }
 
-%type <str_val> node_alias_opt node_labels_opt expression function rel_alias_opt rel_labels_opt compare logic
+%type <str_val> node_alias_opt node_labels_opt expression_list expression function rel_alias_opt
+    rel_labels_opt compare logic typecast_opt
 %type <int_val> upper_bound_opt sort_direction_opt
 %type <bool_val> dot_opt
 %type <pat> variable_length_edges_opt edge_length_opt
@@ -98,10 +101,13 @@ statement:
     query
     | statement query
     | statement SEMICOLON
-      {      
-          if (rtn == false)
+      {
+          if (!rtn)
+          {
               list_append(rtn_list, "v", NULL);
-          
+              list_append(type_list, "agtype", NULL);
+          }
+
           YYACCEPT;
       }
     ;
@@ -283,8 +289,8 @@ map_entry:
     ;
 
 expression_list:
-    expression
-    | expression_list COMMA expression
+    expression { $$ = $1; }
+    | expression_list COMMA expression { $$ = $1; }
     ;
 
 expression:
@@ -317,7 +323,7 @@ list:
     ;
 
 function:
-    IDENTIFIER LPAREN expression_list RPAREN { $$ = $1; }
+    IDENTIFIER LPAREN expression_list RPAREN { $$ = $3; }
     | IDENTIFIER LPAREN path_pattern RPAREN { $$ = $1; }
     | IDENTIFIER LPAREN ASTERISK RPAREN { $$ = $1; }
     ;
@@ -437,7 +443,7 @@ remove_clause:
     ;
 
 return_clause:
-    RETURN distinct_opt { rtn = true; } item_clause union_opt
+    RETURN { rtn = true; } distinct_opt item_clause union_opt
     | RETURN { rtn = true; } ASTERISK union_opt
     | RETURN { rtn = true; } not_opt exists_clause union_opt
     ;
@@ -452,8 +458,8 @@ item_clause:
     ;
 
 item_list:
-    item { list_append(rtn_list, $1->exp, $1->idt); }
-    | item_list COMMA item { list_append(rtn_list, $3->exp, $3->idt); }
+    item typecast_opt { rtn_list->exp = $1->exp; rtn_list->idt = $1->idt; type_list->exp = $2; }
+    | item_list COMMA item typecast_opt { list_append(rtn_list, $3->exp, $3->idt); list_append(type_list, $4, NULL); }
     ;
 
 item:
@@ -474,6 +480,19 @@ item:
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = NULL;
           $$->idt = $5;
+      }
+    ;
+
+typecast_opt:
+    /* empty */ { $$ = "agtype"; }
+    | COLON COLON IDENTIFIER
+      {
+	  if (strcmp($3, "pg_bigint") == 0)
+              $$ = "int";
+          else if (strcmp($3, "pg_float8") == 0)
+              $$ = "float";
+          else
+              $$ = $3;
       }
     ;
 
@@ -543,46 +562,67 @@ bool yyerror(char const* s)
 void
 list_append(MapPair* list, char* exp, char* idt)
 {
-    MapPair *current = (MapPair*) malloc(sizeof(MapPair));
-    if (list == NULL)
-    {
-      list = current;
-      current->exp = exp;
-      current->idt = idt;
-      current->next = NULL;
-      return;
+    struct MapPair* current = list;
+
+    while (current->next != NULL) {
+        current = current->next;
     }
-    list->next = current;
-    list->next->exp = exp;
-    list->next->idt = idt;
-    list->next->next = NULL;
+
+    current->next = (MapPair*) malloc(sizeof(MapPair));
+    current->next->exp = exp;
+    current->next->idt = idt;
+    current->next->next = NULL;
 }
 
 char*
-get_list(MapPair* list)
+get_list(MapPair* list, MapPair* list2)
 {
-  struct MapPair* current = list;
-  char *str = malloc(100);
-  
-  if (list == NULL)
-  {
-    sprintf(str, "a agtype");
-    return str;
-  }
+    struct MapPair* current = list;
+    struct MapPair* current_type = list2;
+    char* str = malloc(100);
+    char temp[100] = "";
 
-  while (current != NULL)
-  {
-    if (current->idt != NULL)
-      sprintf(str, "%s agtype%s", current->idt, (current->next != NULL) ? ", " : "");
-    
-    current = current->next;
-  }
-  return str;
+    while (current != NULL)
+    {
+        /* Check for any '.' and replace with '_' if no alias given */
+        if (current->idt == NULL)
+        {
+	    int i = 0;
+
+            while((current->exp)[i] != '\0')
+            {
+                if((current->exp)[i] == '.')
+                    (current->exp)[i] = '_';
+                i++;
+            }
+        }
+        
+        sprintf(temp, "%s %s%s", 
+            (current->idt != NULL) ? current->idt : current->exp,
+            (current_type->idt != NULL) ? current_type->idt : current_type->exp,
+            (current->next != NULL) ? ", " : "");
+
+        concat_strings(str, temp);
+
+        current = current->next;
+        current_type = current_type->next;
+    }
+    return str;
+}
+
+void
+concat_strings(char* str1, char* str2)
+{
+    size_t len = strlen(str1) + strlen(str2) + 1;
+    snprintf(str1, len, "%s%s", str1, str2);
 }
 
 bool
 psql_scan_cypher_command(char* data)
 {
+    rtn_list = (MapPair*) malloc(sizeof(MapPair));
+    type_list = (MapPair*) malloc(sizeof(MapPair));
+
     YY_BUFFER_STATE buf = yy_scan_string(data);
     yypush_buffer_state(buf);
     yyparse();
@@ -605,7 +645,7 @@ char* convert_to_psql_command(char* data)
             "FROM cypher('%s', $$ "
             "%s "
             "$$) AS (%s);",
-            graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list));
+            graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list, type_list));
     }
     else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
     {
@@ -672,6 +712,9 @@ void reset_vals(void)
 {
     if (rtn_list)
       free(rtn_list);
+
+    if (type_list)
+      free(type_list);
 
     match = false;
     where = false;
