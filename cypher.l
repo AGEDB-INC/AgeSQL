@@ -49,7 +49,7 @@
 "IF"|"if" { return IF; }
 "CASCADE"|"cascade" { return CASCADE; }
 "ALTER"|"alter" { return ALTER; }
-"RENAME"|"rename" { return RENAME; }
+"RENAME TO"|"rename to" { return RENAME; }
 "EXPLAIN"|"explain" { return EXPLAIN; }
 "MERGE"|"merge" { return MERGE; }
 "LOAD"|"load" { return LOAD; }
@@ -85,10 +85,11 @@
 "ALL"|"all" { return ALL; }
 "SELECT"|"select" { return SELECT; }
 "FROM"|"from" { return FROM; }
+"GRAPH_PATH"|"graph_path" { return GRAPH_PATH; }
 
-[0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
-[0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
-[a-zA-Z][a-zA-Z0-9_.]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
+[-+]?[0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
+[-+]?[0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
+[a-zA-Z][a-zA-Z0-9_.*]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
 ("\"")[^"]*("\"")|("\'")[^']*("\'") { yylval.str_val = strdup(yytext); return STRING; }
 ("=")|("!=")|("<=")|(">=")|("<")|(">")|("<>") { yylval.str_val = strdup(yytext); return COMPARATOR; }
 . { return UNKNOWN; }

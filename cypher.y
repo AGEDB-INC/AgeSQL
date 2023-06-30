@@ -38,10 +38,12 @@ void yypush_buffer_state(YY_BUFFER_STATE buffer);
 void *yy_scan_string(char const* str);
 bool yyerror(char const* s);
 
-static void list_append(MapPair* list, char* exp, char* idt);
+static void list_append(MapPair** list, char* exp, char* idt);
 static char* get_list(MapPair* list, MapPair* list2);
-static void concat_strings(char* str1, char* str2);
+static char* get_id_list(MapPair* list);
 void reset_vals(void);
+void free_memory (MapPair* list);
+void init_list (MapPair* list);
 
 int yylex(void);
 int rel_direction = 0; // 1 for "->", -1 for "<-"
@@ -53,6 +55,9 @@ bool match = false;
 bool where = false;
 bool with = false;
 bool rtn = false;
+bool set = false;
+bool set_path = false;
+bool inheritance = false;
 
 char* qry;
 char* graph_name;
@@ -63,6 +68,7 @@ char* file_path;
 
 static struct MapPair* rtn_list = NULL;
 static struct MapPair* type_list = NULL;
+static struct MapPair* id_val_list = NULL;
 %}
 
 %union {
@@ -75,17 +81,17 @@ static struct MapPair* type_list = NULL;
 }
 
 %type <str_val> node_alias_opt node_labels_opt expression_list expression function rel_alias_opt
-    rel_labels_opt compare logic typecast_opt
+    rel_labels_opt compare logic typecast_opt str_val expression_opt
 %type <int_val> upper_bound_opt sort_direction_opt
 %type <bool_val> dot_opt
 %type <pat> variable_length_edges_opt edge_length_opt
-%type <pair> node_properties_opt map_literal nonempty_map_literal map_entry item_list item
+%type <pair> node_properties_opt map_literal nonempty_map_literal map_entry item_list item id_list
 
 %token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
     ASTERISK DOT PLUS SLASH EQUALS DOLLAR OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL ELABEL INHERITS
     DROP IF CASCADE ALTER RENAME EXPLAIN MERGE LOAD IDS LABELS EDGES UNWIND WHERE EXISTS WITH ORDER
     BY SKIP LIMIT  DELETE DETACH SET REMOVE RETURN DISTINCT AS AND OR XOR TRUE FALSE UNION ALL IS
-    NOT NUL SELECT FROM
+    NOT NUL SELECT FROM GRAPH_PATH
 %token <int_val> INTEGER
 %token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING COMPARATOR
@@ -104,10 +110,9 @@ statement:
       {
           if (!rtn)
           {
-              list_append(rtn_list, "v", NULL);
-              list_append(type_list, "agtype", NULL);
+              list_append(&rtn_list, "v", NULL);
+              list_append(&type_list, "agtype", NULL);
           }
-
           YYACCEPT;
       }
     ;
@@ -137,16 +142,22 @@ on_clause:
     | ON IDENTIFIER { graph_name = $2; }
     ;
 
+on_clause_opt:
+    /* empty */
+    | on_clause
+    ;
+
 create_clause:
     CREATE pattern_list
     | CREATE GRAPH IDENTIFIER { graph_name = $3; }
-    | CREATE VLABEL IDENTIFIER inherits_opt on_clause { label_name = $3; }
-    | CREATE ELABEL IDENTIFIER inherits_opt on_clause { edge_name = $3; }
+    | CREATE GRAPH IF NOT EXISTS IDENTIFIER { graph_name = $6; }
+    | CREATE VLABEL IDENTIFIER inherits_opt on_clause_opt { label_name = $3; }
+    | CREATE ELABEL IDENTIFIER inherits_opt on_clause_opt { edge_name = $3; }
     ;
 
 inherits_opt:
     /* empty */
-    | INHERITS expression
+    | INHERITS { inheritance = true; } expression
     ;
 
 drop_clause:
@@ -201,6 +212,12 @@ path_pattern:
 node_pattern:
     LPAREN node_alias_opt node_labels_opt node_properties_opt only_opt dollar_opt RPAREN
     | LPAREN IDENTIFIER compare expression only_opt RPAREN
+    | LPAREN expression_opt RPAREN
+    ;
+
+expression_opt:
+    /* empty */ { $$ = NULL; }
+    | EQUALS expression { $$ = $2; }
     ;
 
 node_alias_opt:
@@ -246,7 +263,7 @@ rel_alias_opt:
 
 rel_labels_opt:
     /* empty */ { $$ = NULL; }
-    | COLON IDENTIFIER pipe_opt { $$ = $2; } 
+    | COLON IDENTIFIER pipe_opt expression_opt { $$ = $2; } 
     ;
 
 pipe_opt:
@@ -293,17 +310,39 @@ expression_list:
     | expression_list COMMA expression { $$ = $1; }
     ;
 
+str_val:
+    IDENTIFIER { $$ = $1; }
+    | STRING { $$ = $1; }
+    ;
+
 expression:
     NUL { $$ = NULL; }
     | INTEGER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
     | FLOAT { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $1); $$ = temp; }
-    | STRING array_opt dot_operator_opt { $$ = $1; }
-    | IDENTIFIER array_opt dot_operator_opt { $$ = $1; }
+    | str_val array_opt dot_operator_opt { $$ = $1; }
     | LBRACKET list RBRACKET { $$ = "list"; }
     | LBRACE map_literal RBRACE { $$ = "property"; }
     | LPAREN sql_statement RPAREN { $$ = "sql"; }
     | function dot_operator_opt { $$ = $1; }
     | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
+    | LPAREN id_list RPAREN { $$ = $2->idt; }
+    ;
+
+id_list:
+    IDENTIFIER 
+    { 
+        $$ = (MapPair*) malloc(sizeof(MapPair));
+        $$->exp = NULL;
+        $$->idt = $1;
+        list_append(&id_val_list, $$->exp, $$->idt);
+    }
+    | IDENTIFIER COMMA id_list 
+    {
+        $$ = (MapPair*) malloc(sizeof(MapPair));
+        $$->exp = NULL;
+        $$->idt = $1;
+        list_append(&id_val_list, $$->exp, $$->idt);
+    }
     ;
 
 dot_operator_opt:
@@ -430,7 +469,11 @@ detach_opt:
     ;
 
 set_clause:
-    SET assign_list
+    SET { set = true; } assign_list
+    | SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
+    | SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; } assign_list
+    | SET GRAPH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
+    | SET GRAPH EQUALS str_val { set = true; set_path = true; graph_name = $4; } assign_list
     ;
 
 assign_list:
@@ -459,7 +502,7 @@ item_clause:
 
 item_list:
     item typecast_opt { rtn_list->exp = $1->exp; rtn_list->idt = $1->idt; type_list->exp = $2; }
-    | item_list COMMA item typecast_opt { list_append(rtn_list, $3->exp, $3->idt); list_append(type_list, $4, NULL); }
+    | item_list COMMA item typecast_opt { list_append(&rtn_list, $3->exp, $3->idt); list_append(&type_list, $4, NULL); }
     ;
 
 item:
@@ -560,9 +603,9 @@ bool yyerror(char const* s)
 }
 
 void
-list_append(MapPair* list, char* exp, char* idt)
+list_append(MapPair** list, char* exp, char* idt)
 {
-    struct MapPair* current = list;
+    struct MapPair* current = *list;
 
     while (current->next != NULL) {
         current = current->next;
@@ -602,7 +645,7 @@ get_list(MapPair* list, MapPair* list2)
             (current_type->idt != NULL) ? current_type->idt : current_type->exp,
             (current->next != NULL) ? ", " : "");
 
-        concat_strings(str, temp);
+        strcat(str, temp);
 
         current = current->next;
         current_type = current_type->next;
@@ -610,11 +653,49 @@ get_list(MapPair* list, MapPair* list2)
     return str;
 }
 
-void
-concat_strings(char* str1, char* str2)
+void free_memory (MapPair* list)
 {
-    size_t len = strlen(str1) + strlen(str2) + 1;
-    snprintf(str1, len, "%s%s", str1, str2);
+    MapPair* next;
+
+    while (list != NULL)
+    {
+        next = list->next;
+        free(list);
+        list = next;
+    }
+    
+    list = NULL;
+}
+
+char*
+get_id_list(MapPair* list)
+{
+    struct MapPair* current = list->next;
+    char *str = malloc(100);
+    char *temp = malloc(100);
+    strcpy(str, "");
+    strcpy(temp, "");
+
+    while (current != NULL)
+    {
+        if (current->idt != NULL)
+        {
+            sprintf(temp, "\'%s\'%s", 
+                  current->idt,              
+                  (current->next != NULL) ? ", " : "");
+        }
+
+        strcat(str, temp);
+        current = current->next;
+    }
+    return str;
+}
+
+void init_list (MapPair* list)
+{    
+    list->exp = NULL;
+    list->idt = NULL;
+    list->next = NULL;
 }
 
 bool
@@ -622,6 +703,11 @@ psql_scan_cypher_command(char* data)
 {
     rtn_list = (MapPair*) malloc(sizeof(MapPair));
     type_list = (MapPair*) malloc(sizeof(MapPair));
+    id_val_list = (MapPair*) malloc(sizeof(MapPair));
+
+    init_list(rtn_list);
+    init_list(type_list);
+    init_list(id_val_list);
 
     YY_BUFFER_STATE buf = yy_scan_string(data);
     yypush_buffer_state(buf);
@@ -656,17 +742,37 @@ char* convert_to_psql_command(char* data)
     }
     else if (pg_strncasecmp(data, "CREATE VLABEL", 13) == 0)
     {
-        snprintf(temp, sizeof(temp),
-            "SELECT * "
-            "FROM create_vlabel('%s', '%s');",
-            graph_name ? graph_name : pset.graph_name, label_name);
+        if (inheritance)
+        {
+            snprintf(temp, sizeof(temp),
+                "SELECT * "
+                "FROM create_vlabel('%s', '%s', ARRAY[%s]);",
+                graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
+        }
+        else
+        {
+            snprintf(temp, sizeof(temp),
+                "SELECT * "
+                "FROM create_vlabel('%s', '%s');",
+                graph_name ? graph_name : pset.graph_name, label_name);
+        }
     }
     else if (pg_strncasecmp(data, "CREATE ELABEL", 13) == 0)
     {
-        snprintf(temp, sizeof(temp),
-            "SELECT * "
-            "FROM create_elabel('%s', '%s');",
-            graph_name ? graph_name : pset.graph_name, edge_name);
+        if (inheritance)
+        {
+            snprintf(temp, sizeof(temp),
+                "SELECT * "
+                "FROM create_elabel('%s', '%s', ARRAY[%s]);",
+                graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
+        }
+        else
+        {
+            snprintf(temp, sizeof(temp),
+                "SELECT * "
+                "FROM create_elabel('%s', '%s');",
+                graph_name ? graph_name : pset.graph_name, edge_name);
+        }
     }
     else if (pg_strncasecmp(data, "DROP GRAPH", 10) == 0)
     {
@@ -697,6 +803,15 @@ char* convert_to_psql_command(char* data)
             "FROM load_edges_from_file('%s', '%s', '%s');",
             graph_name ? graph_name : pset.graph_name, label_name, file_path);
     }
+    else if (set)
+    {
+        /* Set graph name */
+        if (set_path)
+        {
+            pset.graph_name = yylval.str_val;
+            graph_name = yylval.str_val;
+        }
+    }
 
     qry = strdup(temp);
 
@@ -710,14 +825,24 @@ char* convert_to_psql_command(char* data)
 
 void reset_vals(void)
 {
-    if (rtn_list)
-      free(rtn_list);
-
-    if (type_list)
-      free(type_list);
+    free_memory(rtn_list);
+    free_memory(type_list);
+    free_memory(id_val_list);
 
     match = false;
     where = false;
     with = false;
     rtn = false;
+    cascade = false;
+    with_ids = false;
+    set = false;
+    set_path = false;
+    inheritance = false;
+
+    qry = NULL;
+    graph_name = NULL;
+    alter_graph_name = NULL;
+    label_name = NULL;
+    edge_name = NULL;
+    file_path = NULL;
 }
