@@ -444,8 +444,11 @@ MainLoop(FILE *source)
 							pg_strncasecmp(query_buf->data, "CREATE", 6) == 0 ||
 							pg_strncasecmp(query_buf->data, "DROP", 4) == 0 ||
 							pg_strncasecmp(query_buf->data, "ALTER", 5) == 0 ||
-							pg_strncasecmp(query_buf->data, "LOAD", 4) == 0  ||
-                                                        pg_strncasecmp(query_buf->data, "SET", 3) == 0) 
+							pg_strncasecmp(query_buf->data, "LOAD", 4) == 0 ||
+                                                        pg_strncasecmp(query_buf->data, "SET", 3) == 0 ||
+							pg_strncasecmp(query_buf->data, "MERGE", 5) == 0 ||
+							pg_strncasecmp(query_buf->data, "RETURN", 6) == 0 ||
+							pg_strncasecmp(query_buf->data, "UNWIND", 6) == 0) 
 					{
 						cypherCmdStatus = HandleCypherCmds(scan_state,
 											cond_stack,

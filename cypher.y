@@ -80,21 +80,23 @@ static struct MapPair* id_val_list = NULL;
     struct MapPair* pair;
 }
 
-%type <str_val> node_alias_opt node_labels_opt expression_list expression function rel_alias_opt
+%type <str_val> node_alias_opt node_labels_opt expression_list expression math_expression function rel_alias_opt
     rel_labels_opt compare logic typecast_opt str_val expression_opt
 %type <int_val> upper_bound_opt sort_direction_opt
 %type <bool_val> dot_opt
 %type <pat> variable_length_edges_opt edge_length_opt
-%type <pair> node_properties_opt map_literal nonempty_map_literal map_entry item_list item id_list
+%type <pair> node_properties_opt map_literal nonempty_map_literal map_entry return_item_list item id_list
 
 %token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
-    ASTERISK DOT PLUS SLASH EQUALS DOLLAR OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL ELABEL INHERITS
-    DROP IF CASCADE ALTER RENAME EXPLAIN MERGE LOAD IDS LABELS EDGES UNWIND WHERE EXISTS WITH ORDER
-    BY SKIP LIMIT  DELETE DETACH SET REMOVE RETURN DISTINCT AS AND OR XOR TRUE FALSE UNION ALL IS
-    NOT NUL SELECT FROM GRAPH_PATH
+    ASTERISK DOT PLUS SLASH EQUALS DOLLAR EXCLAMATION EQUALSTILDE OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL
+    ELABEL CONSTRAINT ASSERT UNIQUE INHERITS DROP IF CASCADE ALTER STORAGE RENAME OWNER CLUSTER
+    UNLOGGED LOGGED INHERIT NOINHERIT INDEX DISABLE EXPLAIN VERBOSE COSTSOFF MERGE LOAD IDS LABELS
+    EDGES UNWIND WHERE EXISTS WITH WITHOUT ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN
+    DISTINCT STARTS ENDS CONTAINS AS AND OR XOR TRUE FALSE UNION UNIONALL IS IN NOT NUL SELECT FROM
+    GRAPH_PATH
 %token <int_val> INTEGER
 %token <float_val> FLOAT
-%token <str_val> IDENTIFIER STRING COMPARATOR
+%token <str_val> IDENTIFIER STRING
 %token UNKNOWN
 
 %left PIPE
@@ -106,15 +108,7 @@ static struct MapPair* id_val_list = NULL;
 statement:
     query
     | statement query
-    | statement SEMICOLON
-      {
-          if (!rtn)
-          {
-              list_append(&rtn_list, "v", NULL);
-              list_append(&type_list, "agtype", NULL);
-          }
-          YYACCEPT;
-      }
+    | statement SEMICOLON { YYACCEPT; }
     ;
 
 query:
@@ -153,7 +147,42 @@ create_clause:
     | CREATE GRAPH IF NOT EXISTS IDENTIFIER { graph_name = $6; }
     | CREATE VLABEL IDENTIFIER inherits_opt on_clause_opt { label_name = $3; }
     | CREATE ELABEL IDENTIFIER inherits_opt on_clause_opt { edge_name = $3; }
+    | CREATE CONSTRAINT constraint_patt
     ;
+
+constraint_patt:
+    identifier_opt ON IDENTIFIER assert_patt_opt
+    ;
+
+identifier_opt:
+    /* empty */
+    | IDENTIFIER
+    ;
+
+assert_patt_opt:
+    /* empty */
+    | ASSERT compare_list constraint_addon_opt
+    | ASSERT LPAREN compare_list constraint_addon_opt RPAREN
+    ;
+
+compare_list:
+    compare_expression
+    | compare_list logic compare_expression
+    ;
+
+compare_expression:
+    math_expression
+    | compare_expression compare math_expression
+    ;
+
+constraint_addon_opt:
+    /* empty */
+    | IS not_opt UNIQUE
+    | IS not_opt NUL
+    | not_opt IN expression
+    | constraint_addon_opt logic compare_expression IS not_opt UNIQUE
+    | constraint_addon_opt logic compare_expression IS not_opt NUL
+    ; 
 
 inherits_opt:
     /* empty */
@@ -162,6 +191,9 @@ inherits_opt:
 
 drop_clause:
     DROP GRAPH if_exists_opt IDENTIFIER cascade_opt { graph_name = $4; }
+    | DROP VLABEL IDENTIFIER cascade_opt { label_name = $3; }
+    | DROP ELABEL IDENTIFIER cascade_opt { label_name = $3; }
+    | DROP CONSTRAINT identifier_opt ON IDENTIFIER assert_patt_opt
     ;
 
 if_exists_opt:
@@ -179,10 +211,41 @@ alter_clause:
     {
         graph_name = $3; alter_graph_name = $5;
     }
+    | ALTER VLABEL if_exists_opt IDENTIFIER alter_vlabel_options 
+    ;
+
+alter_vlabel_options:
+    SET STORAGE IDENTIFIER
+    | RENAME IDENTIFIER
+    | OWNER IDENTIFIER
+    | CLUSTER ON IDENTIFIER
+    | SET WITHOUT CLUSTER
+    | SET UNLOGGED
+    | SET LOGGED
+    | NOINHERIT IDENTIFIER
+    | INHERIT IDENTIFIER
+    | DISABLE INDEX
     ;
 
 explain_clause:
-    EXPLAIN LPAREN 'VERBOSE' COMMA 'COSTS OFF' RPAREN
+    EXPLAIN explain_list
+    | EXPLAIN LPAREN explain_list RPAREN
+    ;
+
+explain_list:
+    explain_item
+    | explain_list COMMA explain_item
+    ;
+
+explain_item:
+    VERBOSE boolean_opt
+    | COSTSOFF boolean_opt
+    | IDENTIFIER boolean_opt
+    ;
+
+boolean_opt:
+    /* empty */
+    | boolean
     ;
 
 match_clause:
@@ -279,6 +342,7 @@ variable_length_edges_opt:
 edge_length_opt:
     /* empty */ { $$ = NULL; }
     | INTEGER dot_opt upper_bound_opt { $$->lower = $1; $$->dot = $2; $$->upper = $3; }
+    | DOT DOT INTEGER { $$->upper = $3; }
     ;
 
 dot_opt:
@@ -302,12 +366,26 @@ nonempty_map_literal:
     ;
 
 map_entry:
-    IDENTIFIER COLON expression { $$->idt = $1; $$->exp = $3; }
+    IDENTIFIER COLON math_expression { $$->idt = $1; $$->exp = $3; }
     ;
 
 expression_list:
-    expression { $$ = $1; }
-    | expression_list COMMA expression { $$ = $1; }
+    expression expression_ext_opt { $$ = $1; }
+    | expression_list COMMA expression expression_ext_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s_%s", $1, $3); $$ = temp; }
+    ;
+
+expression:
+    NUL { $$ = NULL; }
+    | INTEGER typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
+    | FLOAT typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $1); $$ = temp; }
+    | str_val array_opt dot_operator_opt typecast_opt { $$ = $1; }
+    | boolean { $$ = "bool"; }
+    | LBRACKET list RBRACKET { $$ = "list"; }
+    | LBRACE map_literal RBRACE { $$ = "property"; }
+    | LPAREN sql_statement RPAREN { $$ = "sql"; }
+    | function array_opt dot_operator_opt typecast_opt { $$ = $1; }
+    | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
+    | LPAREN id_list RPAREN { $$ = $2->idt; }
     ;
 
 str_val:
@@ -315,17 +393,14 @@ str_val:
     | STRING { $$ = $1; }
     ;
 
-expression:
-    NUL { $$ = NULL; }
-    | INTEGER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
-    | FLOAT { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $1); $$ = temp; }
-    | str_val array_opt dot_operator_opt { $$ = $1; }
-    | LBRACKET list RBRACKET { $$ = "list"; }
-    | LBRACE map_literal RBRACE { $$ = "property"; }
-    | LPAREN sql_statement RPAREN { $$ = "sql"; }
-    | function dot_operator_opt { $$ = $1; }
-    | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
-    | LPAREN id_list RPAREN { $$ = $2->idt; }
+expression_ext_opt:
+    /* empty */
+    | IN expression where_clause_opt
+    ;
+
+where_clause_opt:
+    /* empty */
+    | where_clause
     ;
 
 id_list:
@@ -362,23 +437,22 @@ list:
     ;
 
 function:
-    IDENTIFIER LPAREN expression_list RPAREN { $$ = $3; }
+    IDENTIFIER LPAREN expression_list RPAREN { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s_%s", $1, $3); $$ = temp; }
     | IDENTIFIER LPAREN path_pattern RPAREN { $$ = $1; }
     | IDENTIFIER LPAREN ASTERISK RPAREN { $$ = $1; }
     ;
 
 math_expression:
-    expression
-    | math_expression EQUALS expression
-    | math_expression PLUS equals_opt expression
-    | math_expression DASH equals_opt expression
-    | math_expression ASTERISK equals_opt expression
-    | math_expression SLASH equals_opt expression
-    ;
-
-equals_opt:
-    /* empty */
-    | EQUALS
+    expression { $$ = $1; }
+    | math_expression EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s = %s", $1, $3); $$ = temp; }
+    | math_expression PLUS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s + %s", $1, $3); $$ = temp; }
+    | math_expression PLUS EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s += %s", $1, $4); $$ = temp }
+    | math_expression DASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s - %s", $1, $3); $$ = temp; }
+    | math_expression DASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s -= %s", $1, $4); $$ = temp; }
+    | math_expression ASTERISK expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s * %s", $1, $3); $$ = temp; }
+    | math_expression ASTERISK EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s *= %s", $1, $4); $$ = temp; }
+    | math_expression SLASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s / %s", $1, $3); $$ = temp; }
+    | math_expression SLASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s /= %s", $1, $4); $$ = temp; }
     ;
 
 merge_clause:
@@ -392,9 +466,9 @@ load_clause:
       {
           label_name = $4; file_path = $6; graph_name = $8;
       }
-    | LOAD EDGES IDENTIFIER FROM STRING ON IDENTIFIER
+    | EDGES IDENTIFIER FROM STRING ON IDENTIFIER
       {
-          edge_name = $3; file_path = $5; graph_name = $7;
+          edge_name = $2; file_path = $4; graph_name = $6;
       }
     ;
 
@@ -438,9 +512,13 @@ not_opt:
 
 compare:
     EQUALS { $$ = "="; }
-    | COMPARATOR { $$ = $1; }
+    | EQUALS EQUALS { $$ = "=="; }
+    | EXCLAMATION EQUALS { $$ = "!="; }
     | LT { $$ = "<"; }
     | GT { $$ = ">"; }
+    | LT EQUALS { $$ = "<="; }
+    | GT EQUALS { $$ = ">="; }
+    | LT GT { $$ = "<>"; }
     ;
 
 logic:
@@ -455,7 +533,7 @@ boolean:
     ;
 
 with_clause:
-    WITH { with = true; } item_clause
+    WITH { with = true; } distinct_opt item_clause
     | WITH { with = true; } ASTERISK
     ;
 
@@ -486,7 +564,7 @@ remove_clause:
     ;
 
 return_clause:
-    RETURN { rtn = true; } distinct_opt item_clause union_opt
+    RETURN { rtn = true; } distinct_opt return_item_clause union_opt
     | RETURN { rtn = true; } ASTERISK union_opt
     | RETURN { rtn = true; } not_opt exists_clause union_opt
     ;
@@ -496,47 +574,88 @@ distinct_opt:
     | DISTINCT
     ;
 
+return_item_clause:
+    return_item_list str_match_clause_opt order_clause_opt skip_clause_opt limit_clause_opt
+    | LBRACKET return_item_list str_match_clause_opt RBRACKET order_clause_opt skip_clause_opt limit_clause_opt
+    ;
+
+return_item_list:
+    item typecast_opt { rtn_list->exp = $1->exp; rtn_list->idt = $1->idt; type_list->exp = $2; }
+    | return_item_list COMMA item typecast_opt { list_append(&rtn_list, $3->exp, $3->idt); list_append(&type_list, $4, NULL); }
+    ;
+
 item_clause:
     item_list order_clause_opt skip_clause_opt limit_clause_opt
     ;
 
 item_list:
-    item typecast_opt { rtn_list->exp = $1->exp; rtn_list->idt = $1->idt; type_list->exp = $2; }
-    | item_list COMMA item typecast_opt { list_append(&rtn_list, $3->exp, $3->idt); list_append(&type_list, $4, NULL); }
+    item 
+    | item_list COMMA item 
     ;
 
 item:
-    expression
+    expression is_expression_opt
     {
         $$ = (MapPair*) malloc(sizeof(MapPair));
         $$->exp = $1;
         $$->idt = NULL;
     }
-    | expression AS IDENTIFIER
+    | expression is_expression_opt AS IDENTIFIER
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = $1;
-          $$->idt = $3;
+          $$->idt = $4;
       }
-    | expression EQUALS expression AS IDENTIFIER
+    | expression is_expression_opt EQUALS expression is_expression_opt AS IDENTIFIER
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = NULL;
-          $$->idt = $5;
+          $$->idt = $7;
       }
+    | expression IN expression PIPE expression
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          $$->exp = $5;
+          $$->idt = NULL;
+      }
+    | exists_clause
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          $$->exp = NULL;
+          $$->idt = "exists";
+      }
+    | exists_clause AS IDENTIFIER
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          $$->exp = NULL;
+          $$->idt = $3;
+      }
+    ;
+
+is_expression_opt:
+    /* empty */
+    | IS not_opt expression
     ;
 
 typecast_opt:
     /* empty */ { $$ = "agtype"; }
-    | COLON COLON IDENTIFIER
+    | COLON COLON str_val
       {
-	  if (strcmp($3, "pg_bigint") == 0)
+	  if (strcmp($3, "pg_bigint") == 0 || strcmp($3, "numeric") == 0)
               $$ = "int";
           else if (strcmp($3, "pg_float8") == 0)
               $$ = "float";
           else
               $$ = $3;
       }
+    ;
+
+str_match_clause_opt:
+    /* empty */
+    | STARTS WITH expression
+    | ENDS WITH expression
+    | CONTAINS expression
+    | EQUALSTILDE expression
     ;
 
 order_clause_opt:
@@ -572,7 +691,7 @@ limit_clause_opt:
 union_opt:
     /* empty */
     | UNION
-    | UNION ALL
+    | UNIONALL
     ;
 
 sql_statement:
@@ -724,16 +843,7 @@ char* convert_to_psql_command(char* data)
     /* Remove semicolon from query */
     data[strlen(data) - 1] = '\0';
 
-    if (pg_strncasecmp(data, "MATCH", 5) == 0)
-    {
-        snprintf(temp, sizeof(temp),
-            "SELECT * "
-            "FROM cypher('%s', $$ "
-            "%s "
-            "$$) AS (%s);",
-            graph_name ? graph_name : pset.graph_name, data, get_list(rtn_list, type_list));
-    }
-    else if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
+    if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -774,6 +884,13 @@ char* convert_to_psql_command(char* data)
                 graph_name ? graph_name : pset.graph_name, edge_name);
         }
     }
+    else if (pg_strncasecmp(data, "DROP VLABEL", 11) == 0 || pg_strncasecmp(data, "DROP ELABEL", 11) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM drop_label('%s', '%s');",
+            graph_name ? graph_name : pset.graph_name, label_name);
+    }
     else if (pg_strncasecmp(data, "DROP GRAPH", 10) == 0)
     {
         snprintf(temp, sizeof(temp),
@@ -803,7 +920,7 @@ char* convert_to_psql_command(char* data)
             "FROM load_edges_from_file('%s', '%s', '%s');",
             graph_name ? graph_name : pset.graph_name, label_name, file_path);
     }
-    else if (set)
+    else if (pg_strncasecmp(data, "SET GRAPH", 9) == 0)
     {
         /* Set graph name */
         if (set_path)
@@ -811,6 +928,15 @@ char* convert_to_psql_command(char* data)
             pset.graph_name = yylval.str_val;
             graph_name = yylval.str_val;
         }
+    }
+    else
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM cypher('%s', $$ "
+            "%s "
+            "$$) AS (%s);",
+            graph_name ? graph_name : pset.graph_name, data, rtn_list->idt || rtn_list->exp ? get_list(rtn_list, type_list) : "v agtype");
     }
 
     qry = strdup(temp);
