@@ -1,4 +1,6 @@
 # Prerequisites
+agesql
+*.swp
 *.d
 
 # Object files

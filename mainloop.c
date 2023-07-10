@@ -437,35 +437,25 @@ MainLoop(FILE *source)
 				/* execute query unless we're in an inactive \if branch */
 				if (conditional_active(cond_stack))
 				{
-					/* handle cypher match command */
-					if (pg_strncasecmp(query_buf->data, "MATCH", 5) == 0 ||
-							pg_strncasecmp(query_buf->data, "OPTIONAL", 8) == 0 ||
-							pg_strncasecmp(query_buf->data, "EXPLAIN", 7) == 0 ||
-							pg_strncasecmp(query_buf->data, "CREATE", 6) == 0 ||
-							pg_strncasecmp(query_buf->data, "DROP", 4) == 0 ||
-							pg_strncasecmp(query_buf->data, "ALTER", 5) == 0 ||
-							pg_strncasecmp(query_buf->data, "LOAD", 4) == 0 ||
-                                                        pg_strncasecmp(query_buf->data, "SET", 3) == 0 ||
-							pg_strncasecmp(query_buf->data, "MERGE", 5) == 0 ||
-							pg_strncasecmp(query_buf->data, "RETURN", 6) == 0 ||
-							pg_strncasecmp(query_buf->data, "UNWIND", 6) == 0) 
-					{
-						cypherCmdStatus = HandleCypherCmds(scan_state,
-											cond_stack,
-											query_buf,
-											previous_buf);
+					cypherCmdStatus = HandleCypherCmds(scan_state,
+									cond_stack,
+					    			query_buf,
+							   		previous_buf);
+                    if (cypherCmdStatus == PSQL_CMD_SEND)
+                    {
+						    success = cypherCmdStatus != PSQL_CMD_ERROR;
 
-						success = cypherCmdStatus != PSQL_CMD_ERROR;
-
-						if (cypherCmdStatus == PSQL_CMD_SEND)
-						{
-							//char *qry = convert_to_psql_command(query_buf->data);
-							success = SendQuery(convert_to_psql_command(query_buf->data));
-						}
-					}
+						    if (cypherCmdStatus == PSQL_CMD_SEND)
+						    {
+							    char *qry = convert_to_psql_command(query_buf->data);
+                                if (qry)
+							        success = SendQuery(qry);
+						    }
+                        }
 					else
+                    {
 						success = SendQuery(query_buf->data);
-
+                    }    
 					slashCmdStatus = success ? PSQL_CMD_SEND : PSQL_CMD_ERROR;
 					pset.stmt_lineno = 1;
 

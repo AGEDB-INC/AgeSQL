@@ -279,7 +279,7 @@ HandleCypherCmds(PsqlScanState scan_state,
 				PQExpBuffer previous_buf)
 {
 	bool accept;
-	backslashResult status;
+	backslashResult status = -1;
 	
 	/* Parse off the command name */
 	accept = psql_scan_cypher_command(query_buf->data);
@@ -287,10 +287,8 @@ HandleCypherCmds(PsqlScanState scan_state,
 	/* And try to execute it */
 	if (accept == true)
 		status = PSQL_CMD_SEND;
-        else
-		status = PSQL_CMD_ERROR;
 
-	if (status != PSQL_CMD_ERROR)
+	if (status == PSQL_CMD_SEND)
 	{
 		conditional_stack_pop(cstack);
 	}

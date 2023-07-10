@@ -446,7 +446,7 @@ math_expression:
     expression { $$ = $1; }
     | math_expression EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s = %s", $1, $3); $$ = temp; }
     | math_expression PLUS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s + %s", $1, $3); $$ = temp; }
-    | math_expression PLUS EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s += %s", $1, $4); $$ = temp }
+    | math_expression PLUS EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s += %s", $1, $4); $$ = temp; }
     | math_expression DASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s - %s", $1, $3); $$ = temp; }
     | math_expression DASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s -= %s", $1, $4); $$ = temp; }
     | math_expression ASTERISK expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s * %s", $1, $3); $$ = temp; }
@@ -547,8 +547,7 @@ detach_opt:
     ;
 
 set_clause:
-    SET { set = true; } assign_list
-    | SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
+    SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
     | SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; } assign_list
     | SET GRAPH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
     | SET GRAPH EQUALS str_val { set = true; set_path = true; graph_name = $4; } assign_list
@@ -716,8 +715,9 @@ from_clause:
 
 bool yyerror(char const* s)
 {
-    printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
-
+//@Ken TODO add all variable which is required for the cypher
+    if (set == true || set_path == true)
+        printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
     return false;
 }
 
@@ -832,7 +832,10 @@ psql_scan_cypher_command(char* data)
     yypush_buffer_state(buf);
     yyparse();
 
-    return true;
+//@Ken TODO add all variable which is required for the cypher
+    if (set == true || set_path == true)
+        return true;
+    return false;
 }
 
 char* convert_to_psql_command(char* data)
@@ -929,7 +932,8 @@ char* convert_to_psql_command(char* data)
             graph_name = yylval.str_val;
         }
     }
-    else
+
+    else if (set)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -938,11 +942,12 @@ char* convert_to_psql_command(char* data)
             "$$) AS (%s);",
             graph_name ? graph_name : pset.graph_name, data, rtn_list->idt || rtn_list->exp ? get_list(rtn_list, type_list) : "v agtype");
     }
-
+    if (qry == NULL)
+    {
+        reset_vals();
+        return NULL;
+    }
     qry = strdup(temp);
-
-    /* Print debug information */
-    printf("\nINFO: %s\n", qry);
 
     reset_vals();
 
