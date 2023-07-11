@@ -4,11 +4,9 @@
 
 %{
 #include "postgres_fe.h"
-
 #include "psqlscanslash.h"
 #include "common/logging.h"
 #include "fe_utils/conditional.h"
-
 #include "libpq-fe.h"
 #include "cypherscan.h"
 #include "cypher.tab.h"
@@ -107,9 +105,11 @@
 "SELECT"|"select" { return SELECT; }
 "FROM"|"from" { return FROM; }
 "GRAPH_PATH"|"graph_path" { return GRAPH_PATH; }
+"PREPARE"|"prepare" { return PREPARE; }
+"EXECUTE"|"execute" { return EXECUTE; }
 
-[-+]?[0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
-[-+]?[0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
+[0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
+[0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
 [a-zA-Z][a-zA-Z0-9_.*]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
 ("\"")[^"]*("\"")|("\'")[^']*("\'") { yylval.str_val = strdup(yytext); return STRING; }
 . { return UNKNOWN; }

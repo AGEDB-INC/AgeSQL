@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "postgres_fe.h" 
 #include "psqlscanslash.h"                                                      
 #include "common/logging.h"                                                     
@@ -10,8 +9,8 @@
 #include "libpq-fe.h"                                                           
 #include "cypherscan.h"
 #include "settings.h"
-
 #include "fe_utils/psqlscan_int.h"
+
 extern PsqlSettings pset;
 
 typedef struct yy_buffer_state* YY_BUFFER_STATE;
@@ -58,6 +57,16 @@ bool rtn = false;
 bool set = false;
 bool set_path = false;
 bool inheritance = false;
+bool optional = false;
+bool explain = false;
+bool create = false;
+bool drop = false;
+bool alter = false;
+bool load = false;
+bool merge = false;
+bool unwind = false;
+bool prepare = false;
+bool execute = false;
 
 char* qry;
 char* graph_name;
@@ -65,6 +74,7 @@ char* alter_graph_name;
 char* label_name;
 char* edge_name;
 char* file_path;
+char* prepare_stmt;
 
 static struct MapPair* rtn_list = NULL;
 static struct MapPair* type_list = NULL;
@@ -93,7 +103,7 @@ static struct MapPair* id_val_list = NULL;
     UNLOGGED LOGGED INHERIT NOINHERIT INDEX DISABLE EXPLAIN VERBOSE COSTSOFF MERGE LOAD IDS LABELS
     EDGES UNWIND WHERE EXISTS WITH WITHOUT ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN
     DISTINCT STARTS ENDS CONTAINS AS AND OR XOR TRUE FALSE UNION UNIONALL IS IN NOT NUL SELECT FROM
-    GRAPH_PATH
+    GRAPH_PATH PREPARE EXECUTE
 %token <int_val> INTEGER
 %token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING
@@ -114,20 +124,35 @@ statement:
 query:
     match_clause
     | on_clause
-    | create_clause
-    | drop_clause
-    | alter_clause
-    | explain_clause
-    | merge_clause
-    | load_clause
-    | unwind_clause
+    | create_clause { create = true; }
+    | drop_clause { drop = true; }
+    | alter_clause { alter = true; }
+    | explain_clause { explain = true; }
+    | merge_clause { merge = true; }
+    | load_clause { load = true; }
+    | unwind_clause { unwind = true; }
     | where_clause
     | exists_clause
     | with_clause
     | delete_clause
-    | set_clause
+    | set_clause { set = true; }
     | remove_clause
     | return_clause
+    | prepare_clause { prepare = true; }
+    | execute_clause { execute = true; }
+    ;
+
+prepare_clause:
+    PREPARE IDENTIFIER stmt_info_opt AS 
+    ;
+
+stmt_info_opt:
+    /* empty */
+    | LPAREN item_list RPAREN
+    ; 
+
+execute_clause:
+    EXECUTE IDENTIFIER stmt_info_opt
     ;
 
 on_clause:
@@ -254,7 +279,7 @@ match_clause:
 
 optional_opt:
     /* empty */
-    | OPTIONAL
+    | OPTIONAL { optional = true; }
     ;
 
 pattern_list:
@@ -376,7 +401,7 @@ expression_list:
 
 expression:
     NUL { $$ = NULL; }
-    | INTEGER typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $1); $$ = temp; }
+    | negative_opt INTEGER typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $2); $$ = temp; }
     | FLOAT typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $1); $$ = temp; }
     | str_val array_opt dot_operator_opt typecast_opt { $$ = $1; }
     | boolean { $$ = "bool"; }
@@ -386,6 +411,12 @@ expression:
     | function array_opt dot_operator_opt typecast_opt { $$ = $1; }
     | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
     | LPAREN id_list RPAREN { $$ = $2->idt; }
+    | DOLLAR INTEGER { $$ = NULL; }
+    ;
+
+negative_opt:
+    /* empty */
+    | DASH
     ;
 
 str_val:
@@ -488,6 +519,7 @@ where_clause:
 where_expression:
     expression compare expression
     | expression IS not_opt expression
+    | expression IN expression
     | exists_clause
     | function
     | boolean
@@ -547,10 +579,11 @@ detach_opt:
     ;
 
 set_clause:
-    SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
-    | SET GRAPH_PATH EQUALS str_val { set = true; set_path = true; graph_name = $4; } assign_list
-    | SET GRAPH EQUALS str_val { set = true; set_path = true; graph_name = $4; }
-    | SET GRAPH EQUALS str_val { set = true; set_path = true; graph_name = $4; } assign_list
+    SET GRAPH_PATH EQUALS str_val { set_path = true; graph_name = $4; }
+    | SET GRAPH_PATH EQUALS str_val { set_path = true; graph_name = $4; } assign_list
+    | SET GRAPH EQUALS str_val { set_path = true; graph_name = $4; }
+    | SET GRAPH EQUALS str_val { set_path = true; graph_name = $4; } assign_list
+    | SET expression EQUALS math_expression
     ;
 
 assign_list:
@@ -585,6 +618,7 @@ return_item_list:
 
 item_clause:
     item_list order_clause_opt skip_clause_opt limit_clause_opt
+    | LPAREN item_list RPAREN order_clause_opt skip_clause_opt limit_clause_opt
     ;
 
 item_list:
@@ -593,25 +627,25 @@ item_list:
     ;
 
 item:
-    expression is_expression_opt
+    math_expression is_expression_opt
     {
         $$ = (MapPair*) malloc(sizeof(MapPair));
         $$->exp = $1;
         $$->idt = NULL;
     }
-    | expression is_expression_opt AS IDENTIFIER
+    | math_expression is_expression_opt AS IDENTIFIER
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = $1;
           $$->idt = $4;
       }
-    | expression is_expression_opt EQUALS expression is_expression_opt AS IDENTIFIER
+    | math_expression is_expression_opt EQUALS math_expression is_expression_opt AS IDENTIFIER
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = NULL;
           $$->idt = $7;
       }
-    | expression IN expression PIPE expression
+    | math_expression IN math_expression PIPE expression
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = $5;
@@ -715,9 +749,10 @@ from_clause:
 
 bool yyerror(char const* s)
 {
-//@Ken TODO add all variable which is required for the cypher
-    if (set == true || set_path == true)
+    if (match || optional || explain || create || drop || alter || load ||
+        set || set_path || merge || rtn || unwind || prepare || execute)
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
+    
     return false;
 }
 
@@ -743,20 +778,44 @@ get_list(MapPair* list, MapPair* list2)
     struct MapPair* current_type = list2;
     char* str = malloc(100);
     char temp[100] = "";
+    int counter = 1;
 
     while (current != NULL)
     {
-        /* Check for any '.' and replace with '_' if no alias given */
-        if (current->idt == NULL)
+	if (current->idt == NULL)
         {
+            /* Check if begins with number */
+            if ((current->exp)[0] == '1' ||
+                (current->exp)[0] == '2' ||
+                (current->exp)[0] == '3' ||
+                (current->exp)[0] == '4' ||
+                (current->exp)[0] == '5' ||
+                (current->exp)[0] == '6' ||
+                (current->exp)[0] == '7' ||
+                (current->exp)[0] == '8' ||
+                (current->exp)[0] == '9' ||
+                (current->exp)[0] == '0')
+                sprintf((current->exp), "number_%d", counter);
+
+            /* Check if is string */
+            if ((current->exp)[0] == '\'' ||
+                (current->exp)[0] == '\"')
+		sprintf((current->exp), "string_%d", counter);
+
 	    int i = 0;
 
-            while((current->exp)[i] != '\0')
+            while ((current->exp)[i] != '\0')
             {
-                if((current->exp)[i] == '.')
+                /* Check for any symbols and spaces and replace with "_" */
+                if ((current->exp)[i] == '.' ||
+                    (current->exp)[i] == '=' ||
+                    (current->exp)[i] == ' ')
                     (current->exp)[i] = '_';
+
                 i++;
             }
+
+            counter++;
         }
         
         sprintf(temp, "%s %s%s", 
@@ -769,6 +828,7 @@ get_list(MapPair* list, MapPair* list2)
         current = current->next;
         current_type = current_type->next;
     }
+
     return str;
 }
 
@@ -832,9 +892,10 @@ psql_scan_cypher_command(char* data)
     yypush_buffer_state(buf);
     yyparse();
 
-//@Ken TODO add all variable which is required for the cypher
-    if (set == true || set_path == true)
+    if (match || optional || explain || create || drop || alter || load ||
+        set || set_path || merge || rtn || unwind || prepare || execute)
         return true;
+    
     return false;
 }
 
@@ -853,6 +914,7 @@ char* convert_to_psql_command(char* data)
             "FROM create_graph('%s');",
             graph_name ? graph_name : pset.graph_name);
     }
+
     else if (pg_strncasecmp(data, "CREATE VLABEL", 13) == 0)
     {
         if (inheritance)
@@ -862,6 +924,7 @@ char* convert_to_psql_command(char* data)
                 "FROM create_vlabel('%s', '%s', ARRAY[%s]);",
                 graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
         }
+
         else
         {
             snprintf(temp, sizeof(temp),
@@ -870,6 +933,7 @@ char* convert_to_psql_command(char* data)
                 graph_name ? graph_name : pset.graph_name, label_name);
         }
     }
+
     else if (pg_strncasecmp(data, "CREATE ELABEL", 13) == 0)
     {
         if (inheritance)
@@ -879,6 +943,7 @@ char* convert_to_psql_command(char* data)
                 "FROM create_elabel('%s', '%s', ARRAY[%s]);",
                 graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
         }
+
         else
         {
             snprintf(temp, sizeof(temp),
@@ -887,6 +952,7 @@ char* convert_to_psql_command(char* data)
                 graph_name ? graph_name : pset.graph_name, edge_name);
         }
     }
+
     else if (pg_strncasecmp(data, "DROP VLABEL", 11) == 0 || pg_strncasecmp(data, "DROP ELABEL", 11) == 0)
     {
         snprintf(temp, sizeof(temp),
@@ -894,6 +960,7 @@ char* convert_to_psql_command(char* data)
             "FROM drop_label('%s', '%s');",
             graph_name ? graph_name : pset.graph_name, label_name);
     }
+
     else if (pg_strncasecmp(data, "DROP GRAPH", 10) == 0)
     {
         snprintf(temp, sizeof(temp),
@@ -901,6 +968,7 @@ char* convert_to_psql_command(char* data)
             "FROM drop_graph('%s', %s);",
             graph_name ? graph_name : pset.graph_name, cascade ? "true" : "false");
     }
+
     else if (pg_strncasecmp(data, "ALTER GRAPH", 11) == 0)
     {
         snprintf(temp, sizeof(temp),
@@ -908,6 +976,7 @@ char* convert_to_psql_command(char* data)
             "FROM alter_graph('%s', 'RENAME', '%s');",
             graph_name ? graph_name : pset.graph_name, alter_graph_name);
     }
+
     else if (pg_strncasecmp(data, "LOAD LABELS", 11) == 0)
     {
         snprintf(temp, sizeof(temp),
@@ -916,6 +985,7 @@ char* convert_to_psql_command(char* data)
             graph_name ? graph_name : pset.graph_name,
             label_name, file_path, with_ids ? "true" : "false");
     }
+
     else if (pg_strncasecmp(data, "LOAD EDGES", 10) == 0)
     {
         snprintf(temp, sizeof(temp),
@@ -923,6 +993,7 @@ char* convert_to_psql_command(char* data)
             "FROM load_edges_from_file('%s', '%s', '%s');",
             graph_name ? graph_name : pset.graph_name, label_name, file_path);
     }
+
     else if (pg_strncasecmp(data, "SET GRAPH", 9) == 0)
     {
         /* Set graph name */
@@ -933,21 +1004,38 @@ char* convert_to_psql_command(char* data)
         }
     }
 
-    else if (set)
+    else if (pg_strncasecmp(data, "PREPARE", 7) == 0)
+    {
+        snprintf(temp, sizeof(temp),
+            "SELECT * "
+            "FROM age_prepare_cypher('%s', '%s');",
+            graph_name ? graph_name : pset.graph_name, "Not supported");
+    }
+
+    else
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
             "FROM cypher('%s', $$ "
             "%s "
             "$$) AS (%s);",
-            graph_name ? graph_name : pset.graph_name, data, rtn_list->idt || rtn_list->exp ? get_list(rtn_list, type_list) : "v agtype");
+            graph_name ? graph_name : pset.graph_name,
+            data, 
+            rtn_list->idt || rtn_list->exp ? get_list(rtn_list, type_list) : "v agtype");
     }
+
+    qry = strdup(temp);
+
     if (qry == NULL)
     {
         reset_vals();
+        
         return NULL;
     }
-    qry = strdup(temp);
+
+    /* Uncomment for debug information
+    printf("\nINFO: %s\n", qry);
+    */
 
     reset_vals();
 
