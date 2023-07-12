@@ -450,8 +450,9 @@ MainLoop(FILE *source)
                                 		
 						if (qry)
 							success = SendQuery(qry);
+                                                free(qry);
                         		}
-
+                                        
 					else
                     			{
 						success = SendQuery(query_buf->data);
