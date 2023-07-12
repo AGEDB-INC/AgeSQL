@@ -286,7 +286,9 @@ HandleCypherCmds(PsqlScanState scan_state,
 
 	/* And try to execute it */
 	if (accept == true)
+	{
 		status = PSQL_CMD_SEND;
+	}
 
 	if (status == PSQL_CMD_SEND)
 	{

@@ -438,24 +438,25 @@ MainLoop(FILE *source)
 				if (conditional_active(cond_stack))
 				{
 					cypherCmdStatus = HandleCypherCmds(scan_state,
-									cond_stack,
-					    			query_buf,
-							   		previous_buf);
-                    if (cypherCmdStatus == PSQL_CMD_SEND)
-                    {
-						    success = cypherCmdStatus != PSQL_CMD_ERROR;
+										cond_stack,
+					    					query_buf,
+							   			previous_buf);
 
-						    if (cypherCmdStatus == PSQL_CMD_SEND)
-						    {
-							    char *qry = convert_to_psql_command(query_buf->data);
-                                if (qry)
-							        success = SendQuery(qry);
-						    }
-                        }
+                    			if (cypherCmdStatus == PSQL_CMD_SEND)
+					{
+						success = cypherCmdStatus != PSQL_CMD_ERROR;
+						
+						char *qry = convert_to_psql_command(query_buf->data);
+                                		
+						if (qry)
+							success = SendQuery(qry);
+                        		}
+
 					else
-                    {
+                    			{
 						success = SendQuery(query_buf->data);
-                    }    
+                    			}
+
 					slashCmdStatus = success ? PSQL_CMD_SEND : PSQL_CMD_ERROR;
 					pset.stmt_lineno = 1;
 
@@ -471,6 +472,7 @@ MainLoop(FILE *source)
 					added_nl_pos = -1;
 					/* we need not do psql_scan_reset() here */
 				}
+
 				else
 				{
 					/* if interactive, warn about non-executed query */
