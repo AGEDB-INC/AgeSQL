@@ -40,6 +40,7 @@
 "MATCH"|"match" { return MATCH; }
 "ONLY"|"only" { return ONLY; }
 "ON"|"on" { return ON; }
+"TO"|"to" { return TO; }
 "CREATE"|"create" { return CREATE; }
 "GRAPH"|"graph" { return GRAPH; }
 "VLABEL"|"vlabel" { return VLABEL; }
@@ -48,19 +49,21 @@
 "ASSERT"|"assert" { return ASSERT; }
 "UNIQUE"|"unique" { return UNIQUE; }
 "INHERITS"|"inherits" { return INHERITS; }
+"TABLESPACE"|"tablespace" { return TABLESPACE; }
 "DROP"|"drop" { return DROP; }
 "IF"|"if" { return IF; }
 "CASCADE"|"cascade" { return CASCADE; }
 "ALTER"|"alter" { return ALTER; }
 "STORAGE"|"storage" { return STORAGE; }
-"RENAME TO"|"rename to" { return RENAME; }
-"OWNER TO"|"owner to" { return OWNER; }
+"RENAME"|"rename" { return RENAME; }
+"OWNER"|"owner" { return OWNER; }
 "CLUSTER"|"cluster" { return CLUSTER; }
 "UNLOGGED"|"unlogged" { return UNLOGGED; }
 "LOGGED"|"logged" { return LOGGED; }
 "INHERIT"|"inherit" { return INHERIT; }
 "NO INHERIT"|"no inherit" { return NOINHERIT; }
 "DISABLE"|"disable" { return DISABLE; }
+"REINDEX"|"reindex" { return REINDEX; }
 "INDEX"|"index" { return INDEX; }
 "EXPLAIN"|"explain" { return EXPLAIN; }
 "VERBOSE"|"verbose" { return VERBOSE; }
@@ -107,6 +110,7 @@
 "GRAPH_PATH"|"graph_path" { return GRAPH_PATH; }
 "PREPARE"|"prepare" { return PREPARE; }
 "EXECUTE"|"execute" { return EXECUTE; }
+"COMMENT"|"comment" { return COMMENT; }
 
 [0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
 [0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }

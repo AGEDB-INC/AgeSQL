@@ -68,6 +68,18 @@ bool unwind = false;
 bool prepare = false;
 bool execute = false;
 
+bool create_graph = false;
+bool create_vlabel = false;
+bool create_elabel = false;
+bool drop_label = false;
+bool drop_graph = false;
+bool alter_graph = false;
+bool rename_graph = false;
+bool load_labels = false;
+bool load_edges = false;
+bool reindex = false;
+bool comment = false;
+
 char* qry;
 char* graph_name;
 char* alter_graph_name;
@@ -91,7 +103,7 @@ static struct MapPair* id_val_list = NULL;
 }
 
 %type <str_val> node_alias_opt node_labels_opt expression_list expression math_expression function rel_alias_opt
-    rel_labels_opt compare logic typecast_opt str_val expression_opt
+    rel_labels_opt compare logic typecast_opt str_val expression_opt graph_path_list
 %type <int_val> upper_bound_opt sort_direction_opt
 %type <bool_val> dot_opt
 %type <pat> variable_length_edges_opt edge_length_opt
@@ -99,11 +111,11 @@ static struct MapPair* id_val_list = NULL;
 
 %token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
     ASTERISK DOT PLUS SLASH EQUALS DOLLAR EXCLAMATION EQUALSTILDE OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL
-    ELABEL CONSTRAINT ASSERT UNIQUE INHERITS DROP IF CASCADE ALTER STORAGE RENAME OWNER CLUSTER
-    UNLOGGED LOGGED INHERIT NOINHERIT INDEX DISABLE EXPLAIN VERBOSE COSTSOFF MERGE LOAD IDS LABELS
+    ELABEL CONSTRAINT ASSERT UNIQUE INHERITS TABLESPACE DROP IF CASCADE ALTER STORAGE RENAME OWNER CLUSTER
+    UNLOGGED LOGGED INHERIT NOINHERIT REINDEX INDEX DISABLE EXPLAIN VERBOSE COSTSOFF MERGE LOAD IDS LABELS
     EDGES UNWIND WHERE EXISTS WITH WITHOUT ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN
     DISTINCT STARTS ENDS CONTAINS AS AND OR XOR TRUE FALSE UNION UNIONALL IS IN NOT NUL SELECT FROM
-    GRAPH_PATH PREPARE EXECUTE
+    GRAPH_PATH PREPARE EXECUTE COMMENT TO
 %token <int_val> INTEGER
 %token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING
@@ -135,11 +147,13 @@ query:
     | exists_clause
     | with_clause
     | delete_clause
-    | set_clause { set = true; }
     | remove_clause
     | return_clause
     | prepare_clause { prepare = true; }
     | execute_clause { execute = true; }
+    | set_graph_clause
+    | reindex_clause
+    | comment_clause
     ;
 
 prepare_clause:
@@ -167,16 +181,41 @@ on_clause_opt:
     ;
 
 create_clause:
-    CREATE pattern_list
-    | CREATE GRAPH IDENTIFIER { graph_name = $3; }
-    | CREATE GRAPH IF NOT EXISTS IDENTIFIER { graph_name = $6; }
-    | CREATE VLABEL IDENTIFIER inherits_opt on_clause_opt { label_name = $3; }
-    | CREATE ELABEL IDENTIFIER inherits_opt on_clause_opt { edge_name = $3; }
+    CREATE { create = true; }
+    | CREATE { create = true; } pattern_list set_clause_opt
+    | CREATE logged_opt GRAPH if_exists_opt IDENTIFIER tablespace_opt disable_index_opt { graph_name = $5; create_graph = true; }
+    | CREATE logged_opt VLABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { label_name = $5; create_vlabel = true; }
+    | CREATE logged_opt ELABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { edge_name = $5; create_elabel = true; }
     | CREATE CONSTRAINT constraint_patt
+    ;
+
+logged_opt:
+    /* empty */
+    | LOGGED
+    | UNLOGGED
+    ;
+
+tablespace_opt:
+    /* empty */
+    | TABLESPACE IDENTIFIER
+    ;
+
+disable_index_opt:
+    /* empty */
+    | DISABLE INDEX
     ;
 
 constraint_patt:
     identifier_opt ON IDENTIFIER assert_patt_opt
+    ;
+
+reindex_clause:
+    REINDEX { reindex = true; } VLABEL IDENTIFIER
+    ;
+
+comment_clause:
+    COMMENT ON { comment = true; } GRAPH IDENTIFIER IS STRING
+    | COMMENT VLABEL IDENTIFIER IS STRING
     ;
 
 identifier_opt:
@@ -215,15 +254,15 @@ inherits_opt:
     ;
 
 drop_clause:
-    DROP GRAPH if_exists_opt IDENTIFIER cascade_opt { graph_name = $4; }
-    | DROP VLABEL IDENTIFIER cascade_opt { label_name = $3; }
-    | DROP ELABEL IDENTIFIER cascade_opt { label_name = $3; }
+    DROP GRAPH if_exists_opt IDENTIFIER cascade_opt { graph_name = $4; drop_graph = true; }
+    | DROP VLABEL IDENTIFIER cascade_opt { label_name = $3; drop_label = true; }
+    | DROP ELABEL IDENTIFIER cascade_opt { label_name = $3; drop_label = true; }
     | DROP CONSTRAINT identifier_opt ON IDENTIFIER assert_patt_opt
     ;
 
 if_exists_opt:
     /* empty */
-    | IF EXISTS
+    | IF not_opt EXISTS
     ;
 
 cascade_opt:
@@ -232,17 +271,22 @@ cascade_opt:
     ;
 
 alter_clause:
-    ALTER GRAPH IDENTIFIER RENAME IDENTIFIER
+    ALTER GRAPH IDENTIFIER alter_graph_options
     {
-        graph_name = $3; alter_graph_name = $5;
+        graph_name = $3;
     }
     | ALTER VLABEL if_exists_opt IDENTIFIER alter_vlabel_options 
     ;
 
+alter_graph_options:
+    OWNER TO IDENTIFIER { alter_graph = true; }
+    | RENAME TO IDENTIFIER { alter_graph_name = $3; rename_graph = true; }
+    ;
+
 alter_vlabel_options:
     SET STORAGE IDENTIFIER
-    | RENAME IDENTIFIER
-    | OWNER IDENTIFIER
+    | RENAME TO IDENTIFIER
+    | OWNER TO IDENTIFIER
     | CLUSTER ON IDENTIFIER
     | SET WITHOUT CLUSTER
     | SET UNLOGGED
@@ -273,8 +317,17 @@ boolean_opt:
     | boolean
     ;
 
+set_clause:
+    SET { set = true; } assign_list set_clause_opt
+    ;
+
+set_clause_opt:
+    /* empty */
+    | set_clause
+    ;
+
 match_clause:
-    optional_opt MATCH { match = true; } pattern_list
+    optional_opt MATCH { match = true; } pattern_list set_clause_opt
     ;
 
 optional_opt:
@@ -283,8 +336,13 @@ optional_opt:
     ;
 
 pattern_list:
-    assign_to_variable_opt path_pattern
-    | pattern_list COMMA assign_to_variable_opt path_pattern
+    assign_to_variable_opt path_pattern_list
+    | assign_to_variable_opt LPAREN path_pattern_list RPAREN
+    ;
+
+path_pattern_list:
+    path_pattern
+    | path_pattern_list COMMA assign_to_variable_opt path_pattern
     ;
 
 assign_to_variable_opt:
@@ -495,11 +553,11 @@ load_clause:
     | LOAD FROM IDENTIFIER AS IDENTIFIER
     | LOAD LABELS with_id_opt IDENTIFIER FROM STRING ON IDENTIFIER
       {
-          label_name = $4; file_path = $6; graph_name = $8;
+          label_name = $4; file_path = $6; graph_name = $8; load_labels = true;
       }
     | EDGES IDENTIFIER FROM STRING ON IDENTIFIER
       {
-          edge_name = $2; file_path = $4; graph_name = $6;
+          edge_name = $2; file_path = $4; graph_name = $6; load_edges = true;
       }
     ;
 
@@ -578,17 +636,19 @@ detach_opt:
     | DETACH
     ;
 
-set_clause:
-    SET GRAPH_PATH EQUALS str_val { set_path = true; graph_name = $4; }
-    | SET GRAPH_PATH EQUALS str_val { set_path = true; graph_name = $4; } assign_list
-    | SET GRAPH EQUALS str_val { set_path = true; graph_name = $4; }
-    | SET GRAPH EQUALS str_val { set_path = true; graph_name = $4; } assign_list
-    | SET expression EQUALS math_expression
+set_graph_clause:
+    SET GRAPH_PATH EQUALS graph_path_list { set = true; set_path = true; graph_name = $4; }
+    | SET GRAPH EQUALS graph_path_list { set = true; set_path = true; graph_name = $4; }
     ;
 
 assign_list:
     math_expression
     | assign_list COMMA math_expression
+    ;
+
+graph_path_list:
+    IDENTIFIER { $$ = $1; }
+    | graph_path_list COMMA IDENTIFIER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s, %s", $1, $3); $$ = temp; }
     ;
 
 remove_clause:
@@ -777,8 +837,12 @@ get_list(MapPair* list, MapPair* list2)
     struct MapPair* current = list;
     struct MapPair* current_type = list2;
     char* str = malloc(100);
-    char temp[100] = "";
+    char *temp = malloc(100);
     int counter = 1;
+    int i = 0;
+    
+    strcpy(str, "");
+    strcpy(temp, "");
 
     while (current != NULL)
     {
@@ -802,7 +866,7 @@ get_list(MapPair* list, MapPair* list2)
                 (current->exp)[0] == '\"')
 		sprintf((current->exp), "string_%d", counter);
 
-	    int i = 0;
+	    i = 0;
 
             while ((current->exp)[i] != '\0')
             {
@@ -880,6 +944,8 @@ void init_list (MapPair* list)
 bool
 psql_scan_cypher_command(char* data)
 {
+    YY_BUFFER_STATE buf;
+
     rtn_list = (MapPair*) malloc(sizeof(MapPair));
     type_list = (MapPair*) malloc(sizeof(MapPair));
     id_val_list = (MapPair*) malloc(sizeof(MapPair));
@@ -888,7 +954,7 @@ psql_scan_cypher_command(char* data)
     init_list(type_list);
     init_list(id_val_list);
 
-    YY_BUFFER_STATE buf = yy_scan_string(data);
+    buf = yy_scan_string(data);
     yypush_buffer_state(buf);
     yyparse();
 
@@ -902,12 +968,12 @@ psql_scan_cypher_command(char* data)
 char* convert_to_psql_command(char* data)
 {
     char temp[1000] = "";
-    char* qry = NULL;
+    qry = NULL;
 
     /* Remove semicolon from query */
     data[strlen(data) - 1] = '\0';
 
-    if (pg_strncasecmp(data, "CREATE GRAPH", 12) == 0)
+    if (create_graph)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -915,7 +981,7 @@ char* convert_to_psql_command(char* data)
             graph_name ? graph_name : pset.graph_name);
     }
 
-    else if (pg_strncasecmp(data, "CREATE VLABEL", 13) == 0)
+    else if (create_vlabel)
     {
         if (inheritance)
         {
@@ -934,7 +1000,7 @@ char* convert_to_psql_command(char* data)
         }
     }
 
-    else if (pg_strncasecmp(data, "CREATE ELABEL", 13) == 0)
+    else if (create_elabel)
     {
         if (inheritance)
         {
@@ -953,7 +1019,7 @@ char* convert_to_psql_command(char* data)
         }
     }
 
-    else if (pg_strncasecmp(data, "DROP VLABEL", 11) == 0 || pg_strncasecmp(data, "DROP ELABEL", 11) == 0)
+    else if (drop_label)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -961,7 +1027,7 @@ char* convert_to_psql_command(char* data)
             graph_name ? graph_name : pset.graph_name, label_name);
     }
 
-    else if (pg_strncasecmp(data, "DROP GRAPH", 10) == 0)
+    else if (drop_graph)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -969,7 +1035,7 @@ char* convert_to_psql_command(char* data)
             graph_name ? graph_name : pset.graph_name, cascade ? "true" : "false");
     }
 
-    else if (pg_strncasecmp(data, "ALTER GRAPH", 11) == 0)
+    else if (rename_graph)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -977,7 +1043,7 @@ char* convert_to_psql_command(char* data)
             graph_name ? graph_name : pset.graph_name, alter_graph_name);
     }
 
-    else if (pg_strncasecmp(data, "LOAD LABELS", 11) == 0)
+    else if (load_labels)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -986,7 +1052,7 @@ char* convert_to_psql_command(char* data)
             label_name, file_path, with_ids ? "true" : "false");
     }
 
-    else if (pg_strncasecmp(data, "LOAD EDGES", 10) == 0)
+    else if (load_edges)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
@@ -994,7 +1060,7 @@ char* convert_to_psql_command(char* data)
             graph_name ? graph_name : pset.graph_name, label_name, file_path);
     }
 
-    else if (pg_strncasecmp(data, "SET GRAPH", 9) == 0)
+    else if (set_path)
     {
         /* Set graph name */
         if (set_path)
@@ -1026,7 +1092,7 @@ char* convert_to_psql_command(char* data)
 
     qry = strdup(temp);
 
-    if (qry == NULL)
+    if (strcmp(qry, "") == 0)
     {
         reset_vals();
         
@@ -1038,7 +1104,6 @@ char* convert_to_psql_command(char* data)
     */
 
     reset_vals();
-
     return qry;
 }
 
@@ -1057,9 +1122,20 @@ void reset_vals(void)
     set = false;
     set_path = false;
     inheritance = false;
-
-    qry = NULL;
-    graph_name = NULL;
+    create_graph = false;
+    create_vlabel = false;
+    create_elabel = false;
+    drop_label = false;
+    drop_graph = false;
+    alter_graph = false;
+    rename_graph = false;
+    load_labels = false;
+    load_edges = false;
+    create = false;
+    reindex = false;
+    comment = false;
+    drop = false;
+    
     alter_graph_name = NULL;
     label_name = NULL;
     edge_name = NULL;
