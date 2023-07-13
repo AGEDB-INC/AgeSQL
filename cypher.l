@@ -111,6 +111,7 @@
 "PREPARE"|"prepare" { return PREPARE; }
 "EXECUTE"|"execute" { return EXECUTE; }
 "COMMENT"|"comment" { return COMMENT; }
+"SHOW"|"show" { return SHOW; }
 
 [0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
 [0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
