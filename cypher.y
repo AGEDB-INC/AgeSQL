@@ -181,8 +181,7 @@ on_clause_opt:
     ;
 
 create_clause:
-    CREATE { create = true; }
-    | CREATE { create = true; } pattern_list set_clause_opt
+    //| CREATE { create = true; } pattern_list set_clause_opt
     | CREATE logged_opt GRAPH if_exists_opt IDENTIFIER tablespace_opt disable_index_opt { graph_name = $5; create_graph = true; }
     | CREATE logged_opt VLABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { label_name = $5; create_vlabel = true; }
     | CREATE logged_opt ELABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { edge_name = $5; create_elabel = true; }
@@ -809,10 +808,9 @@ from_clause:
 
 bool yyerror(char const* s)
 {
-    if (match || optional || explain || create || drop || alter || load ||
+    if (match || optional || explain || create_graph || drop || alter || load ||
         set || set_path || merge || rtn || unwind || prepare || execute)
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
-    
     return false;
 }
 

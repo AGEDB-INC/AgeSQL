@@ -442,7 +442,7 @@ MainLoop(FILE *source)
 					    					query_buf,
 							   			previous_buf);
 
-                    			if (cypherCmdStatus == PSQL_CMD_SEND)
+                    if (cypherCmdStatus == PSQL_CMD_SEND)
 					{
 						success = cypherCmdStatus != PSQL_CMD_ERROR;
 						
