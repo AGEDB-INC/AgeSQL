@@ -79,6 +79,7 @@ bool load_edges = false;
 bool reindex = false;
 bool comment = false;
 bool show = false;
+bool show = false;
 
 char* qry;
 char* graph_name;
@@ -109,13 +110,17 @@ static struct MapPair* id_val_list = NULL;
 %type <pat> variable_length_edges_opt edge_length_opt
 %type <pair> node_properties_opt map_literal nonempty_map_literal map_entry return_item_list item id_list
 
-%token ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
-    ASTERISK DOT PLUS SLASH EQUALS DOLLAR EXCLAMATION EQUALSTILDE OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL
+%token
+    ASC DESC DASH LT GT LBRACKET RBRACKET LPAREN RPAREN COLON PIPE COMMA SEMICOLON LBRACE RBRACE
+    ASTERISK DOT PLUS SLASH EQUALS DOLLAR EXCLAMATION EQUALSTILDE PERCENT CARET
+    
+    OPTIONAL MATCH ONLY ON CREATE GRAPH VLABEL
     ELABEL CONSTRAINT ASSERT UNIQUE INHERITS TABLESPACE DROP IF CASCADE ALTER STORAGE RENAME OWNER CLUSTER
     UNLOGGED LOGGED INHERIT NOINHERIT REINDEX INDEX DISABLE EXPLAIN VERBOSE COSTSOFF MERGE LOAD IDS LABELS
     EDGES UNWIND WHERE EXISTS WITH WITHOUT ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN
     DISTINCT STARTS ENDS CONTAINS AS AND OR XOR TRUE FALSE UNION UNIONALL IS IN NOT NUL SELECT FROM
-    GRAPH_PATH PREPARE EXECUTE COMMENT TO SHOW
+    GRAPH_PATH PREPARE EXECUTE COMMENT SHOW CASE WHEN THEN ELSE END
+
 %token <int_val> INTEGER
 %token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING
@@ -182,7 +187,7 @@ on_clause_opt:
     ;
 
 create_clause:
-    CREATE pattern_list set_clause_opt
+    CREATE pattern_list set_clause_opt { create = true; }
     | CREATE logged_opt GRAPH if_exists_opt IDENTIFIER tablespace_opt disable_index_opt { graph_name = $5; create_graph = true; }
     | CREATE logged_opt VLABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { label_name = $5; create_vlabel = true; }
     | CREATE logged_opt ELABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { edge_name = $5; create_elabel = true; }
@@ -196,7 +201,7 @@ logged_opt:
     ;
 
 tablespace_opt:
-    /* empty */
+    /* emtpy */
     | TABLESPACE IDENTIFIER
     ;
 
@@ -271,22 +276,19 @@ cascade_opt:
     ;
 
 alter_clause:
-    ALTER GRAPH IDENTIFIER alter_graph_options
-    {
-        graph_name = $3;
-    }
+    ALTER GRAPH IDENTIFIER alter_graph_options { graph_name = $3; }
     | ALTER VLABEL if_exists_opt IDENTIFIER alter_vlabel_options 
     ;
 
 alter_graph_options:
-    OWNER TO IDENTIFIER { alter_graph = true; }
-    | RENAME TO IDENTIFIER { alter_graph_name = $3; rename_graph = true; }
+    OWNER IDENTIFIER { alter_graph = true; }
+    | RENAME IDENTIFIER { alter_graph_name = $2; rename_graph = true; }
     ;
 
 alter_vlabel_options:
     SET STORAGE IDENTIFIER
-    | RENAME TO IDENTIFIER
-    | OWNER TO IDENTIFIER
+    | RENAME IDENTIFIER
+    | OWNER IDENTIFIER
     | CLUSTER ON IDENTIFIER
     | SET WITHOUT CLUSTER
     | SET UNLOGGED
@@ -343,7 +345,6 @@ pattern_list:
 path_pattern_list:
     path_pattern
     | path_pattern_list COMMA assign_to_variable_opt path_pattern
-    ;
 
 assign_to_variable_opt:
     /* empty */
@@ -469,22 +470,22 @@ map_entry:
 
 expression_list:
     expression expression_ext_opt { $$ = $1; }
-    | expression_list COMMA expression expression_ext_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s_%s", $1, $3); $$ = temp; }
+    | expression_list COMMA expression expression_ext_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s_%s", $1, $3); $$ = temp; free(temp); }
     ;
 
 expression:
-    NUL { $$ = NULL; }
-    | negative_opt INTEGER typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $2); $$ = temp; }
-    | FLOAT typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $1); $$ = temp; }
+    NUL { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "!_null"); $$ = temp; free(temp); }
+    | negative_opt INTEGER typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%d", $2); $$ = temp; free(temp); }
+    | negative_opt FLOAT typecast_opt { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%f", $2); $$ = temp; free(temp); }
     | str_val array_opt dot_operator_opt typecast_opt { $$ = $1; }
-    | boolean { $$ = "bool"; }
-    | LBRACKET list RBRACKET { $$ = "list"; }
-    | LBRACE map_literal RBRACE { $$ = "property"; }
-    | LPAREN sql_statement RPAREN { $$ = "sql"; }
+    | boolean { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "?_bool"); $$ = temp; free(temp); }
+    | LBRACKET list RBRACKET { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "[]_list"); $$ = temp; free(temp); }
+    | LBRACE map_literal RBRACE { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "{}_property"); $$ = temp; free(temp); }
+    | LPAREN sql_statement RPAREN { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "sql"); $$ = temp; free(temp); }
     | function array_opt dot_operator_opt typecast_opt { $$ = $1; }
     | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
     | LPAREN id_list RPAREN { $$ = $2->idt; }
-    | DOLLAR INTEGER { $$ = NULL; }
+    | DOLLAR INTEGER { $$ = "dollar_int"; }
     ;
 
 negative_opt:
@@ -541,22 +542,24 @@ list:
     ;
 
 function:
-    IDENTIFIER LPAREN expression_list RPAREN { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s_%s", $1, $3); $$ = temp; }
+    IDENTIFIER LPAREN expression_list RPAREN { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s_%s", $1, $3); $$ = temp; free(temp); }
     | IDENTIFIER LPAREN path_pattern RPAREN { $$ = $1; }
     | IDENTIFIER LPAREN ASTERISK RPAREN { $$ = $1; }
     ;
 
 math_expression:
     expression { $$ = $1; }
-    | math_expression EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s = %s", $1, $3); $$ = temp; }
-    | math_expression PLUS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s + %s", $1, $3); $$ = temp; }
-    | math_expression PLUS EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s += %s", $1, $4); $$ = temp; }
-    | math_expression DASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s - %s", $1, $3); $$ = temp; }
-    | math_expression DASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s -= %s", $1, $4); $$ = temp; }
-    | math_expression ASTERISK expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s * %s", $1, $3); $$ = temp; }
-    | math_expression ASTERISK EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s *= %s", $1, $4); $$ = temp; }
-    | math_expression SLASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s / %s", $1, $3); $$ = temp; }
-    | math_expression SLASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s /= %s", $1, $4); $$ = temp; }
+    | math_expression EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s = %s", $1, $3); $$ = temp; free(temp); }
+    | math_expression PLUS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s + %s", $1, $3); $$ = temp; free(temp); }
+    | math_expression PLUS EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s += %s", $1, $4); $$ = temp; free(temp); }
+    | math_expression DASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s - %s", $1, $3); $$ = temp; free(temp); }
+    | math_expression DASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s -= %s", $1, $4); $$ = temp; free(temp); }
+    | math_expression ASTERISK expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s * %s", $1, $3); $$ = temp; free(temp); }
+    | math_expression ASTERISK EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s *= %s", $1, $4); $$ = temp; free(temp);}
+    | math_expression SLASH expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s / %s", $1, $3); $$ = temp; free(temp); }
+    | math_expression SLASH EQUALS expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s /= %s", $1, $4); $$ = temp; free(temp); }
+    | math_expression PERCENT expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s %% %s", $1, $3); $$ = temp; free(temp); }
+    | math_expression CARET expression { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s ^ %s", $1, $3); $$ = temp; free(temp); }
     ;
 
 merge_clause:
@@ -665,10 +668,10 @@ assign_list:
     math_expression
     | assign_list COMMA math_expression
     ;
-
+    
 graph_path_list:
     IDENTIFIER { $$ = $1; }
-    | graph_path_list COMMA IDENTIFIER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s, %s", $1, $3); $$ = temp; }
+    | graph_path_list COMMA IDENTIFIER { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "%s, %s", $1, $3); $$ = temp; free(temp); }
     ;
 
 remove_clause:
@@ -679,6 +682,11 @@ return_clause:
     RETURN { rtn = true; } distinct_opt return_item_clause union_opt
     | RETURN { rtn = true; } ASTERISK union_opt
     | RETURN { rtn = true; } not_opt exists_clause union_opt
+    ;
+
+case_clause:
+    CASE IDENTIFIER WHEN math_expression THEN math_expression ELSE math_expression END
+    | CASE WHEN math_expression THEN math_expression ELSE math_expression END
     ;
 
 distinct_opt:
@@ -725,6 +733,15 @@ item:
           $$->exp = NULL;
           $$->idt = $7;
       }
+    | math_expression IN math_expression
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          char* temp = (char*) malloc(sizeof(char));
+          sprintf(temp, "?_bool");
+          $$->exp = temp;
+          $$->idt = NULL;
+          free(temp);
+      }
     | math_expression IN math_expression PIPE expression
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
@@ -742,6 +759,15 @@ item:
           $$ = (MapPair*) malloc(sizeof(MapPair));
           $$->exp = NULL;
           $$->idt = $3;
+      }
+    | case_clause
+      {
+          $$ = (MapPair*) malloc(sizeof(MapPair));
+          char* temp = (char*) malloc(sizeof(char));
+          sprintf(temp, ":_case");
+          $$->exp = temp;
+          $$->idt = NULL;
+          free(temp);
       }
     ;
 
@@ -829,10 +855,11 @@ from_clause:
 
 bool yyerror(char const* s)
 {
-    if (match || optional || explain || create || drop || alter || load ||
-        set || set_path || merge || rtn || unwind || prepare || execute ||
+    if (match || optional || explain || create || create_graph || drop || alter ||
+        load || set || set_path || merge || rtn || unwind || prepare || execute ||
         show)
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
+    
     return false;
 }
 
@@ -857,12 +884,15 @@ get_list(MapPair* list, MapPair* list2)
     struct MapPair* current = list;
     struct MapPair* current_type = list2;
     char* str = malloc(100);
-    char *temp = malloc(100);
-    int counter = 1;
+    char temp[1000] = "";
+    int num_count = 1;
+    int str_count = 1;
+    int bool_count = 1;
+    int null_count = 1;
+    int list_count = 1;
+    int prop_count = 1;
+    int case_count = 1;
     int i = 0;
-    
-    strcpy(str, "");
-    strcpy(temp, "");
 
     while (current != NULL)
     {
@@ -878,30 +908,54 @@ get_list(MapPair* list, MapPair* list2)
                 (current->exp)[0] == '7' ||
                 (current->exp)[0] == '8' ||
                 (current->exp)[0] == '9' ||
-                (current->exp)[0] == '0')
-                sprintf((current->exp), "number_%d", counter);
+                (current->exp)[0] == '-')
+                sprintf((current->exp), "number_%d", num_count++);
 
             /* Check if is string */
-            if ((current->exp)[0] == '\'' ||
+            else if ((current->exp)[0] == '\'' ||
                 (current->exp)[0] == '\"')
-		sprintf((current->exp), "string_%d", counter);
+		        sprintf((current->exp), "string_%d", str_count++);
 
-	    i = 0;
+            /* Check if is bool */
+            else if ((current->exp)[0] == '?')
+                sprintf((current->exp), "bool_%d", bool_count++);
 
-            while ((current->exp)[i] != '\0')
+            /* Check if is null */
+            else if ((current->exp)[0] == '!')
+                sprintf((current->exp), "null_%d", null_count++);
+
+            else if ((current->exp)[0] == ':')
+                sprintf((current->exp), "case_%d", case_count++);
+            
+            else
             {
-                /* Check for any symbols and spaces and replace with "_" */
-                if ((current->exp)[i] == '.' ||
-                    (current->exp)[i] == '=' ||
-                    (current->exp)[i] == ' ' ||
-                    (current->exp)[i] == '\''||
-                    (current->exp)[i] == '\"')
-                    (current->exp)[i] = '_';
+                i = 0;
 
-                i++;
+                while ((current->exp)[i] != '\0')
+                {
+                    /* Check for any symbols and spaces and replace with "_" */
+                    if ((current->exp)[i] == '.' ||
+                        (current->exp)[i] == '=' ||
+                        (current->exp)[i] == '\'' ||
+                        (current->exp)[i] == '\"' ||
+                        (current->exp)[i] == ' ')
+                        (current->exp)[i] = '_';
+
+                    else if ((current->exp)[i] == '[')
+                    {
+                        sprintf((current->exp), "list_%d", list_count++);
+                        break;
+                    }
+
+                    else if ((current->exp)[i] == '{')
+                    {
+                        sprintf((current->exp), "property_%d", prop_count++);
+                        break;
+                    }
+
+                    i++;
+                }
             }
-
-            counter++;
         }
         
         sprintf(temp, "%s %s%s", 
@@ -966,8 +1020,6 @@ void init_list (MapPair* list)
 bool
 psql_scan_cypher_command(char* data)
 {
-    YY_BUFFER_STATE buf;
-
     rtn_list = (MapPair*) malloc(sizeof(MapPair));
     type_list = (MapPair*) malloc(sizeof(MapPair));
     id_val_list = (MapPair*) malloc(sizeof(MapPair));
@@ -976,12 +1028,12 @@ psql_scan_cypher_command(char* data)
     init_list(type_list);
     init_list(id_val_list);
 
-    buf = yy_scan_string(data);
+    YY_BUFFER_STATE buf = yy_scan_string(data);
     yypush_buffer_state(buf);
     yyparse();
 
-    if (match || optional || explain || create || drop || alter || load ||
-        set || set_path || merge || rtn || unwind || prepare || execute ||
+    if (match || optional || explain || create || create_graph || drop || alter ||
+        load || set || set_path || merge || rtn || unwind || prepare || execute ||
         show)
         return true;
     
@@ -1121,18 +1173,17 @@ char* convert_to_psql_command(char* data)
 
     qry = strdup(temp);
 
-    if (strcmp(qry, "") == 0)
+    if (qry == NULL)
     {
         reset_vals();
-        
         return NULL;
     }
 
-    /* Uncomment for debug information
-    printf("\nINFO: %s\n", qry);
-    */
-    
+    /* Uncomment for debug information */
+    // printf("\nINFO: %s\n", qry);
+
     reset_vals();
+
     return qry;
 }
 
@@ -1173,7 +1224,7 @@ void reset_vals(void)
     reindex = false;
     comment = false;
     show = false;
-    
+
     alter_graph_name = NULL;
     label_name = NULL;
     edge_name = NULL;

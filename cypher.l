@@ -35,12 +35,13 @@
 "$" { return DOLLAR; }
 "!" { return EXCLAMATION; }
 "=~" { return EQUALSTILDE; }
+"%" { return PERCENT; }
+"^" { return CARET; }
 
 "OPTIONAL"|"optional" { return OPTIONAL; }
 "MATCH"|"match" { return MATCH; }
 "ONLY"|"only" { return ONLY; }
 "ON"|"on" { return ON; }
-"TO"|"to" { return TO; }
 "CREATE"|"create" { return CREATE; }
 "GRAPH"|"graph" { return GRAPH; }
 "VLABEL"|"vlabel" { return VLABEL; }
@@ -55,8 +56,8 @@
 "CASCADE"|"cascade" { return CASCADE; }
 "ALTER"|"alter" { return ALTER; }
 "STORAGE"|"storage" { return STORAGE; }
-"RENAME"|"rename" { return RENAME; }
-"OWNER"|"owner" { return OWNER; }
+"RENAME TO"|"rename to" { return RENAME; }
+"OWNER TO"|"owner to" { return OWNER; }
 "CLUSTER"|"cluster" { return CLUSTER; }
 "UNLOGGED"|"unlogged" { return UNLOGGED; }
 "LOGGED"|"logged" { return LOGGED; }
@@ -112,9 +113,15 @@
 "EXECUTE"|"execute" { return EXECUTE; }
 "COMMENT"|"comment" { return COMMENT; }
 "SHOW"|"show" { return SHOW; }
+"CASE"|"case" { return CASE; }
+"WHEN"|"when" { return WHEN; }
+"THEN"|"then" { return THEN; }
+"ELSE"|"else" { return ELSE; }
+"END"|"end" { return END; }
 
-[0-9]+ { yylval.int_val = atoi(yytext); return INTEGER; }
-[0-9]+"."[0-9]+ { yylval.float_val = atof(yytext); return FLOAT; }
+[0-9]+[eE0-9]* { yylval.int_val = atoi(yytext); return INTEGER; }
+[0-9]+"."[eE0-9]* { yylval.float_val = atof(yytext); return FLOAT; }
+[0x][a-zA-Z0-9]* { yylval.int_val = (int)strtol(yytext, NULL, 16); return INTEGER; }
 [a-zA-Z][a-zA-Z0-9_.*]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
 ("\"")[^"]*("\"")|("\'")[^']*("\'") { yylval.str_val = strdup(yytext); return STRING; }
 . { return UNKNOWN; }
