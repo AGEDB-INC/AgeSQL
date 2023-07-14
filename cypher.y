@@ -67,7 +67,6 @@ bool merge = false;
 bool unwind = false;
 bool prepare = false;
 bool execute = false;
-
 bool create_graph = false;
 bool create_vlabel = false;
 bool create_elabel = false;
@@ -79,6 +78,7 @@ bool load_labels = false;
 bool load_edges = false;
 bool reindex = false;
 bool comment = false;
+bool show = false;
 
 char* qry;
 char* graph_name;
@@ -115,7 +115,7 @@ static struct MapPair* id_val_list = NULL;
     UNLOGGED LOGGED INHERIT NOINHERIT REINDEX INDEX DISABLE EXPLAIN VERBOSE COSTSOFF MERGE LOAD IDS LABELS
     EDGES UNWIND WHERE EXISTS WITH WITHOUT ORDER BY SKIP LIMIT DELETE DETACH SET REMOVE RETURN
     DISTINCT STARTS ENDS CONTAINS AS AND OR XOR TRUE FALSE UNION UNIONALL IS IN NOT NUL SELECT FROM
-    GRAPH_PATH PREPARE EXECUTE COMMENT TO
+    GRAPH_PATH PREPARE EXECUTE COMMENT TO SHOW
 %token <int_val> INTEGER
 %token <float_val> FLOAT
 %token <str_val> IDENTIFIER STRING
@@ -154,6 +154,7 @@ query:
     | set_graph_clause
     | reindex_clause
     | comment_clause
+    | show_clause { show = true; }
     ;
 
 prepare_clause:
@@ -181,7 +182,7 @@ on_clause_opt:
     ;
 
 create_clause:
-    //| CREATE { create = true; } pattern_list set_clause_opt
+    CREATE pattern_list set_clause_opt
     | CREATE logged_opt GRAPH if_exists_opt IDENTIFIER tablespace_opt disable_index_opt { graph_name = $5; create_graph = true; }
     | CREATE logged_opt VLABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { label_name = $5; create_vlabel = true; }
     | CREATE logged_opt ELABEL if_exists_opt IDENTIFIER inherits_opt on_clause_opt tablespace_opt disable_index_opt { edge_name = $5; create_elabel = true; }
@@ -423,8 +424,18 @@ variable_length_edges_opt:
 
 edge_length_opt:
     /* empty */ { $$ = NULL; }
-    | INTEGER dot_opt upper_bound_opt { $$->lower = $1; $$->dot = $2; $$->upper = $3; }
-    | DOT DOT INTEGER { $$->upper = $3; }
+    | INTEGER dot_opt upper_bound_opt 
+        { 
+            $$ = (EdgePattern*) malloc(sizeof(EdgePattern));
+            $$->lower = $1; 
+            $$->dot = $2;
+            $$->upper = $3;
+        }
+    | DOT DOT INTEGER 
+        { 
+            $$ = (EdgePattern*) malloc(sizeof(EdgePattern));
+            $$->upper = $3; 
+        }
     ;
 
 dot_opt:
@@ -448,7 +459,12 @@ nonempty_map_literal:
     ;
 
 map_entry:
-    IDENTIFIER COLON math_expression { $$->idt = $1; $$->exp = $3; }
+    IDENTIFIER COLON math_expression 
+        {
+            $$ = (MapPair*) malloc(sizeof(MapPair));
+            $$->idt = $1;
+            $$->exp = $3;
+        }
     ;
 
 expression_list:
@@ -640,6 +656,11 @@ set_graph_clause:
     | SET GRAPH EQUALS graph_path_list { set = true; set_path = true; graph_name = $4; }
     ;
 
+show_clause:
+    SHOW GRAPH_PATH
+    | SHOW GRAPH
+    ;
+
 assign_list:
     math_expression
     | assign_list COMMA math_expression
@@ -808,8 +829,9 @@ from_clause:
 
 bool yyerror(char const* s)
 {
-    if (match || optional || explain || create_graph || drop || alter || load ||
-        set || set_path || merge || rtn || unwind || prepare || execute)
+    if (match || optional || explain || create || drop || alter || load ||
+        set || set_path || merge || rtn || unwind || prepare || execute ||
+        show)
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
     return false;
 }
@@ -871,7 +893,9 @@ get_list(MapPair* list, MapPair* list2)
                 /* Check for any symbols and spaces and replace with "_" */
                 if ((current->exp)[i] == '.' ||
                     (current->exp)[i] == '=' ||
-                    (current->exp)[i] == ' ')
+                    (current->exp)[i] == ' ' ||
+                    (current->exp)[i] == '\''||
+                    (current->exp)[i] == '\"')
                     (current->exp)[i] = '_';
 
                 i++;
@@ -957,7 +981,8 @@ psql_scan_cypher_command(char* data)
     yyparse();
 
     if (match || optional || explain || create || drop || alter || load ||
-        set || set_path || merge || rtn || unwind || prepare || execute)
+        set || set_path || merge || rtn || unwind || prepare || execute ||
+        show)
         return true;
     
     return false;
@@ -1065,15 +1090,21 @@ char* convert_to_psql_command(char* data)
         {
             pset.graph_name = yylval.str_val;
             graph_name = yylval.str_val;
+            printf("SET\n");
         }
     }
 
-    else if (pg_strncasecmp(data, "PREPARE", 7) == 0)
+    else if (prepare)
     {
         snprintf(temp, sizeof(temp),
             "SELECT * "
             "FROM age_prepare_cypher('%s', '%s');",
             graph_name ? graph_name : pset.graph_name, "Not supported");
+    }
+
+    else if (show)
+    {
+        printf("\nGRAPH_PATH = %s\n", graph_name);
     }
 
     else
@@ -1100,7 +1131,7 @@ char* convert_to_psql_command(char* data)
     /* Uncomment for debug information
     printf("\nINFO: %s\n", qry);
     */
-
+    
     reset_vals();
     return qry;
 }
@@ -1111,15 +1142,25 @@ void reset_vals(void)
     free_memory(type_list);
     free_memory(id_val_list);
 
+    cascade = false;
+    with_ids = false;
     match = false;
     where = false;
     with = false;
     rtn = false;
-    cascade = false;
-    with_ids = false;
     set = false;
     set_path = false;
     inheritance = false;
+    optional = false;
+    explain = false;
+    create = false;
+    drop = false;
+    alter = false;
+    load = false;
+    merge = false;
+    unwind = false;
+    prepare = false;
+    execute = false;
     create_graph = false;
     create_vlabel = false;
     create_elabel = false;
@@ -1129,10 +1170,9 @@ void reset_vals(void)
     rename_graph = false;
     load_labels = false;
     load_edges = false;
-    create = false;
     reindex = false;
     comment = false;
-    drop = false;
+    show = false;
     
     alter_graph_name = NULL;
     label_name = NULL;
