@@ -438,9 +438,9 @@ MainLoop(FILE *source)
 				if (conditional_active(cond_stack))
 				{
 					cypherCmdStatus = HandleCypherCmds(scan_state,
-										cond_stack,
-					    					query_buf,
-							   			previous_buf);
+														cond_stack,
+					    								query_buf,
+							   							previous_buf);
 
                     if (cypherCmdStatus == PSQL_CMD_SEND)
 					{
@@ -450,9 +450,8 @@ MainLoop(FILE *source)
                                 		
 						if (qry)
 							success = SendQuery(qry);
-                                                free(qry);
-                        		}
-                                        
+                    }
+
 					else
                     			{
 						success = SendQuery(query_buf->data);
