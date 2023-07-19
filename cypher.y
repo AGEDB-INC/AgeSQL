@@ -79,7 +79,6 @@ bool load_edges = false;
 bool reindex = false;
 bool comment = false;
 bool show = false;
-bool show = false;
 
 char* qry;
 char* graph_name;
@@ -481,11 +480,12 @@ expression:
     | boolean { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "?_bool"); $$ = temp; free(temp); }
     | LBRACKET list RBRACKET { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "[]_list"); $$ = temp; free(temp); }
     | LBRACE map_literal RBRACE { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "{}_property"); $$ = temp; free(temp); }
-    | LPAREN sql_statement RPAREN { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "sql"); $$ = temp; free(temp); }
+    | LPAREN sql_statement RPAREN { char* temp = (char*) malloc(sizeof(char)); sprintf(temp, "|_sql"); $$ = temp; free(temp); }
     | function array_opt dot_operator_opt typecast_opt { $$ = $1; }
     | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
     | LPAREN id_list RPAREN { $$ = $2->idt; }
     | DOLLAR INTEGER { $$ = "dollar_int"; }
+    | ASTERISK { $$ = "*"; }
     ;
 
 negative_opt:
@@ -642,7 +642,6 @@ boolean:
 
 with_clause:
     WITH { with = true; } distinct_opt item_clause
-    | WITH { with = true; } ASTERISK
     ;
 
 delete_clause:
@@ -680,7 +679,6 @@ remove_clause:
 
 return_clause:
     RETURN { rtn = true; } distinct_opt return_item_clause union_opt
-    | RETURN { rtn = true; } ASTERISK union_opt
     | RETURN { rtn = true; } not_opt exists_clause union_opt
     ;
 
@@ -724,7 +722,7 @@ item:
     | math_expression is_expression_opt AS IDENTIFIER
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
-          $$->exp = $1;
+          $$->exp = NULL;
           $$->idt = $4;
       }
     | math_expression is_expression_opt EQUALS math_expression is_expression_opt AS IDENTIFIER
@@ -736,11 +734,8 @@ item:
     | math_expression IN math_expression
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
-          char* temp = (char*) malloc(sizeof(char));
-          sprintf(temp, "?_bool");
-          $$->exp = temp;
+          $$->exp = "bool";
           $$->idt = NULL;
-          free(temp);
       }
     | math_expression IN math_expression PIPE expression
       {
@@ -751,8 +746,8 @@ item:
     | exists_clause
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
-          $$->exp = NULL;
-          $$->idt = "exists";
+          $$->exp = "bool";
+          $$->idt = NULL;
       }
     | exists_clause AS IDENTIFIER
       {
@@ -763,11 +758,8 @@ item:
     | case_clause
       {
           $$ = (MapPair*) malloc(sizeof(MapPair));
-          char* temp = (char*) malloc(sizeof(char));
-          sprintf(temp, ":_case");
-          $$->exp = temp;
+          $$->exp = "case";
           $$->idt = NULL;
-          free(temp);
       }
     ;
 
@@ -883,83 +875,17 @@ get_list(MapPair* list, MapPair* list2)
 {
     struct MapPair* current = list;
     struct MapPair* current_type = list2;
-    char* str = malloc(100);
+    char* str = malloc(1000);
     char temp[1000] = "";
-    int num_count = 1;
-    int str_count = 1;
-    int bool_count = 1;
-    int null_count = 1;
-    int list_count = 1;
-    int prop_count = 1;
-    int case_count = 1;
-    int i = 0;
+    char count_str[100] = "";
+    int rtn_count = 1;
 
     while (current != NULL)
     {
-	if (current->idt == NULL)
-        {
-            /* Check if begins with number */
-            if ((current->exp)[0] == '1' ||
-                (current->exp)[0] == '2' ||
-                (current->exp)[0] == '3' ||
-                (current->exp)[0] == '4' ||
-                (current->exp)[0] == '5' ||
-                (current->exp)[0] == '6' ||
-                (current->exp)[0] == '7' ||
-                (current->exp)[0] == '8' ||
-                (current->exp)[0] == '9' ||
-                (current->exp)[0] == '-')
-                sprintf((current->exp), "number_%d", num_count++);
-
-            /* Check if is string */
-            else if ((current->exp)[0] == '\'' ||
-                (current->exp)[0] == '\"')
-		        sprintf((current->exp), "string_%d", str_count++);
-
-            /* Check if is bool */
-            else if ((current->exp)[0] == '?')
-                sprintf((current->exp), "bool_%d", bool_count++);
-
-            /* Check if is null */
-            else if ((current->exp)[0] == '!')
-                sprintf((current->exp), "null_%d", null_count++);
-
-            else if ((current->exp)[0] == ':')
-                sprintf((current->exp), "case_%d", case_count++);
-            
-            else
-            {
-                i = 0;
-
-                while ((current->exp)[i] != '\0')
-                {
-                    /* Check for any symbols and spaces and replace with "_" */
-                    if ((current->exp)[i] == '.' ||
-                        (current->exp)[i] == '=' ||
-                        (current->exp)[i] == '\'' ||
-                        (current->exp)[i] == '\"' ||
-                        (current->exp)[i] == ' ')
-                        (current->exp)[i] = '_';
-
-                    else if ((current->exp)[i] == '[')
-                    {
-                        sprintf((current->exp), "list_%d", list_count++);
-                        break;
-                    }
-
-                    else if ((current->exp)[i] == '{')
-                    {
-                        sprintf((current->exp), "property_%d", prop_count++);
-                        break;
-                    }
-
-                    i++;
-                }
-            }
-        }
+        sprintf(count_str, "rtn_%d", rtn_count++);
         
         sprintf(temp, "%s %s%s", 
-            (current->idt != NULL) ? current->idt : current->exp,
+            (current->idt != NULL) ? current->idt : count_str,
             (current_type->idt != NULL) ? current_type->idt : current_type->exp,
             (current->next != NULL) ? ", " : "");
 
