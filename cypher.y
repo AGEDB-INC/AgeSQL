@@ -147,17 +147,17 @@ query:
     | merge_clause { merge = true; }
     | load_clause { load = true; }
     | unwind_clause { unwind = true; }
-    | where_clause
+    | where_clause { where = true; }
     | exists_clause
-    | with_clause
+    | with_clause { with = true; }
     | delete_clause
     | remove_clause
-    | return_clause
+    | return_clause { rtn = true; }
     | prepare_clause { prepare = true; }
     | execute_clause { execute = true; }
     | set_graph_clause
-    | reindex_clause
-    | comment_clause
+    | reindex_clause { reindex = true; }
+    | comment_clause { comment = true; }
     | show_clause { show = true; }
     ;
 
@@ -214,12 +214,12 @@ constraint_patt:
     ;
 
 reindex_clause:
-    REINDEX { reindex = true; } VLABEL IDENTIFIER
+    REINDEX VLABEL IDENTIFIER
     ;
 
 comment_clause:
-    COMMENT ON { comment = true; } GRAPH IDENTIFIER IS STRING
-    | COMMENT VLABEL IDENTIFIER IS STRING
+    COMMENT ON GRAPH IDENTIFIER IS STRING
+    | COMMENT ON VLABEL IDENTIFIER IS STRING
     ;
 
 identifier_opt:
@@ -486,6 +486,7 @@ expression:
     | LPAREN id_list RPAREN { $$ = $2->idt; }
     | DOLLAR INTEGER { $$ = "dollar_int"; }
     | ASTERISK { $$ = "*"; }
+    | LPAREN math_expression RPAREN { $$ = $2; }
     ;
 
 negative_opt:
@@ -522,6 +523,12 @@ id_list:
         $$->exp = NULL;
         $$->idt = $1;
         list_append(&id_val_list, $$->exp, $$->idt);
+    }
+    | IDENTIFIER IN expression
+    {
+        $$ = (MapPair*) malloc(sizeof(MapPair));
+        $$->exp = NULL;
+        $$->idt = $1;
     }
     ;
 
@@ -563,7 +570,7 @@ math_expression:
     ;
 
 merge_clause:
-    MERGE path_pattern
+    MERGE path_pattern set_clause_opt
     ;
 
 load_clause:
@@ -589,11 +596,12 @@ unwind_clause:
     ;
 
 where_clause:
-    WHERE { where = true; } not_opt where_expression
+    WHERE not_opt where_expression
     ;
 
 where_expression:
     expression compare expression
+    | where_expression AND where_expression
     | expression IS not_opt expression
     | expression IN expression
     | exists_clause
@@ -604,6 +612,7 @@ where_expression:
     | where_expression logic not_opt exists_clause
     | where_expression logic not_opt function
     | where_expression logic not_opt boolean
+    | IDENTIFIER
     ;
 
 exists_clause:
@@ -641,11 +650,11 @@ boolean:
     ;
 
 with_clause:
-    WITH { with = true; } distinct_opt item_clause
+    WITH distinct_opt item_clause
     ;
 
 delete_clause:
-    detach_opt DELETE expression_list
+    detach_opt DELETE expression_list set_clause_opt
     ;
 
 detach_opt:
@@ -678,8 +687,8 @@ remove_clause:
     ;
 
 return_clause:
-    RETURN { rtn = true; } distinct_opt return_item_clause union_opt
-    | RETURN { rtn = true; } not_opt exists_clause union_opt
+    RETURN distinct_opt return_item_clause union_opt
+    | RETURN not_opt exists_clause union_opt
     ;
 
 case_clause:
@@ -849,8 +858,10 @@ bool yyerror(char const* s)
 {
     if (match || optional || explain || create || create_graph || drop || alter ||
         load || set || set_path || merge || rtn || unwind || prepare || execute ||
-        show)
+        show || reindex || comment)
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
+
+    reset_vals();
     
     return false;
 }
@@ -879,6 +890,7 @@ get_list(MapPair* list, MapPair* list2)
     char temp[1000] = "";
     char count_str[100] = "";
     int rtn_count = 1;
+    strcpy(str, "");
 
     while (current != NULL)
     {
@@ -946,21 +958,22 @@ void init_list (MapPair* list)
 bool
 psql_scan_cypher_command(char* data)
 {
+    YY_BUFFER_STATE buf;
     rtn_list = (MapPair*) malloc(sizeof(MapPair));
     type_list = (MapPair*) malloc(sizeof(MapPair));
-    id_val_list = (MapPair*) malloc(sizeof(MapPair));
+    id_val_list = (MapPair*) malloc(sizeof(MapPair));    
 
     init_list(rtn_list);
     init_list(type_list);
     init_list(id_val_list);
 
-    YY_BUFFER_STATE buf = yy_scan_string(data);
+    buf = yy_scan_string(data);
     yypush_buffer_state(buf);
     yyparse();
 
     if (match || optional || explain || create || create_graph || drop || alter ||
         load || set || set_path || merge || rtn || unwind || prepare || execute ||
-        show)
+        show || reindex || comment)
         return true;
     
     return false;
@@ -1106,7 +1119,7 @@ char* convert_to_psql_command(char* data)
     }
 
     /* Uncomment for debug information */
-    // printf("\nINFO: %s\n", qry);
+     printf("\nINFO: %s\n", qry);
 
     reset_vals();
 
@@ -1115,9 +1128,14 @@ char* convert_to_psql_command(char* data)
 
 void reset_vals(void)
 {
-    free_memory(rtn_list);
-    free_memory(type_list);
-    free_memory(id_val_list);
+    if (rtn_list)
+        free_memory(rtn_list);
+
+    if (type_list)
+        free_memory(type_list);
+
+    if (id_val_list)
+        free_memory(id_val_list);
 
     cascade = false;
     with_ids = false;

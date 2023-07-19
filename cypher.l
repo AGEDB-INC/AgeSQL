@@ -120,8 +120,8 @@
 "END"|"end" { return END; }
 
 [0-9]+[eE0-9]* { yylval.int_val = atoi(yytext); return INTEGER; }
-[0-9]+"."[eE0-9]* { yylval.float_val = atof(yytext); return FLOAT; }
-[0x][a-zA-Z0-9]* { yylval.int_val = (int)strtol(yytext, NULL, 16); return INTEGER; }
+[0-9]+"."[0-9]+([eE][0-9]+)? { yylval.float_val = atof(yytext); return FLOAT; }
+0[xX][a-fA-F0-9]+ { yylval.int_val = (int)strtol(yytext, NULL, 16); return INTEGER; }
 [a-zA-Z][a-zA-Z0-9_.*]* { yylval.str_val = strdup(yytext); return IDENTIFIER; }
 ("\"")[^"]*("\"")|("\'")[^']*("\'") { yylval.str_val = strdup(yytext); return STRING; }
 . { return UNKNOWN; }

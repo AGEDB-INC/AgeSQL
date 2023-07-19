@@ -444,9 +444,10 @@ MainLoop(FILE *source)
 
                     if (cypherCmdStatus == PSQL_CMD_SEND)
 					{
-						success = cypherCmdStatus != PSQL_CMD_ERROR;
+						char *qry;
+                                                success = cypherCmdStatus != PSQL_CMD_ERROR;
 						
-						char *qry = convert_to_psql_command(query_buf->data);
+						qry = convert_to_psql_command(query_buf->data);
                                 		
 						if (qry)
 							success = SendQuery(qry);
