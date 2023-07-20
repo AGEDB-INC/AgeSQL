@@ -79,6 +79,7 @@ bool load_edges = false;
 bool reindex = false;
 bool comment = false;
 bool show = false;
+bool select = false;
 
 char* qry;
 char* graph_name;
@@ -840,17 +841,31 @@ sql_statement:
     ;
 
 sql_query:
-    select_clause
-    | from_clause
+    select_clause { select = true; }
     | where_clause
     ;
 
 select_clause:
-    SELECT expression
+    SELECT expression from_clause_opt
+    ;
+
+from_clause_opt:
+    /* empty */
+    | from_clause
     ;
 
 from_clause:
-    FROM IDENTIFIER
+    FROM IDENTIFIER as_clause_opt
+    | FROM LPAREN statement RPAREN as_clause_opt
+    ;
+
+as_clause_opt:
+    /* empty */
+    | as_clause
+    ;
+
+as_clause:
+    AS IDENTIFIER
     ;
 %%
 
@@ -987,12 +1002,218 @@ char* convert_to_psql_command(char* data)
     /* Remove semicolon from query */
     data[strlen(data) - 1] = '\0';
 
+    if (explain)
+    {
+        int index = 0;
+        char* found;
+        char* alter_cap_found = strstr(data, "ALTER");
+        char* alter_found = strstr(data, "alter");
+        char* create_cap_found = strstr(data, "CREATE");
+        char* create_found = strstr(data, "create");
+        char* drop_cap_found = strstr(data, "DROP");
+        char* drop_found = strstr(data, "drop");
+        char* execute_cap_found = strstr(data, "EXECUTE");
+        char* execute_found = strstr(data, "execute");
+        char* load_cap_found = strstr(data, "LOAD");
+        char* load_found = strstr(data, "load");
+        char* match_cap_found = strstr(data, "MATCH");
+        char* match_found = strstr(data, "match");
+        char* prepare_cap_found = strstr(data, "PREPARE");
+        char* prepare_found = strstr(data, "prepare");
+        char* return_cap_found = strstr(data, "RETURN");
+        char* return_found = strstr(data, "return");
+
+        if (alter_cap_found)
+        {
+            int alter_cap_index = alter_cap_found - data;
+
+            if (index == 0 || alter_cap_index < index)
+            {
+                found = strdup(alter_cap_found);
+                index = alter_cap_index;
+            }
+        }
+
+        if (alter_found)
+        {
+            int alter_index = alter_found - data;
+
+            if (index == 0 || alter_index < index)
+            {
+                found = strdup(alter_found);
+                index = alter_index;
+            }
+        }
+
+        if (create_cap_found)
+        {
+            int create_cap_index = create_cap_found - data;
+
+            if (index == 0 || create_cap_index < index)
+            {
+                found = strdup(create_cap_found);
+                index = create_cap_index;
+            }
+        }
+        
+        if (create_found)
+        {
+            int create_index = create_found - data;
+
+            if (index == 0 || create_index < index)
+            {
+                found = strdup(create_found);
+                index = create_index;
+            }
+        }
+
+        if (drop_cap_found)
+        {
+            int drop_cap_index = drop_cap_found - data;
+
+            if (index == 0 || drop_cap_index < index)
+            {
+                found = strdup(drop_cap_found);
+                index = drop_cap_index;
+            }
+        }
+
+        if (drop_found)
+        {
+            int drop_index = drop_found - data;
+
+            if (index == 0 || drop_index < index)
+            {
+                found = strdup(drop_found);
+                index = drop_index;
+            }
+        }
+
+        if (execute_cap_found)
+        {
+            int execute_cap_index = execute_cap_found - data;
+
+            if (index == 0 || execute_cap_index < index)
+            {
+                found = strdup(execute_cap_found);
+                index = execute_cap_index;
+            }
+        }
+        
+        if (execute_found)
+        {
+            int execute_index = execute_found - data;
+
+            if (index == 0 || execute_index < index)
+            {
+                found = strdup(execute_found);
+                index = execute_index;
+            }
+        }
+        
+        if (load_cap_found)
+        {
+            int load_cap_index = load_cap_found - data;
+
+            if (index == 0 || load_cap_index < index)
+            {
+                found = strdup(load_cap_found);
+                index = load_cap_index;
+            }
+        }
+        
+        if (load_found)
+        {
+            int load_index = load_found - data;
+
+            if (index == 0 || load_index < index)
+            {
+                found = strdup(load_found);
+                index = load_index;
+            }
+        }
+
+        if (match_cap_found)
+        {
+            int match_cap_index = match_cap_found - data;
+
+            if (index == 0 || match_cap_index < index)
+            {
+                found = strdup(match_cap_found);
+                index = match_cap_index;
+            }
+        }
+
+        if (match_found)
+        {
+            int match_index = match_found - data;
+
+            if (index == 0 || match_index < index)
+            {
+                found = strdup(match_found);
+                index = match_index;
+            }
+        }
+
+        if (prepare_cap_found)
+        {
+            int prepare_cap_index = prepare_cap_found - data;
+
+            if (index == 0 || prepare_cap_index < index)
+            {
+                found = strdup(prepare_cap_found);
+                index = prepare_cap_index;
+            }
+        }
+
+        if (prepare_found)
+        {
+            int prepare_index = prepare_found - data;
+
+            if (index == 0 || prepare_index < index)
+            {
+                found = strdup(prepare_found);
+                index = prepare_index;
+            }
+        }
+
+        if (return_cap_found)
+        {
+            int return_cap_index = return_cap_found - data;
+
+            if (index == 0 || return_cap_index < index)
+            {
+                found = strdup(return_cap_found);
+                index = return_cap_index;
+            }
+        }
+
+        if (return_found)
+        {
+            int return_index = return_found - data;
+
+            if (index == 0 || return_index < index)
+            {
+                found = strdup(return_found);
+                index = return_index;
+            }
+        }
+
+        if (found)
+        {
+            data[index - 1] = '\0';
+            snprintf(temp, sizeof(temp), "%s ", data);
+            data = found;
+        }
+    }
+
     if (create_graph)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM create_graph('%s');",
-            graph_name ? graph_name : pset.graph_name);
+            temp, graph_name ? graph_name : pset.graph_name);
     }
 
     else if (create_vlabel)
@@ -1000,17 +1221,19 @@ char* convert_to_psql_command(char* data)
         if (inheritance)
         {
             snprintf(temp, sizeof(temp),
+                "%s"
                 "SELECT * "
                 "FROM create_vlabel('%s', '%s', ARRAY[%s]);",
-                graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
+                temp, graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
         }
 
         else
         {
             snprintf(temp, sizeof(temp),
+                "%s"
                 "SELECT * "
                 "FROM create_vlabel('%s', '%s');",
-                graph_name ? graph_name : pset.graph_name, label_name);
+                temp, graph_name ? graph_name : pset.graph_name, label_name);
         }
     }
 
@@ -1019,49 +1242,56 @@ char* convert_to_psql_command(char* data)
         if (inheritance)
         {
             snprintf(temp, sizeof(temp),
+                "%s"
                 "SELECT * "
                 "FROM create_elabel('%s', '%s', ARRAY[%s]);",
-                graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
+                temp, graph_name ? graph_name : pset.graph_name, label_name, get_id_list(id_val_list));
         }
 
         else
         {
             snprintf(temp, sizeof(temp),
+                "%s"
                 "SELECT * "
                 "FROM create_elabel('%s', '%s');",
-                graph_name ? graph_name : pset.graph_name, edge_name);
+                temp, graph_name ? graph_name : pset.graph_name, edge_name);
         }
     }
 
     else if (drop_label)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM drop_label('%s', '%s');",
-            graph_name ? graph_name : pset.graph_name, label_name);
+            temp, graph_name ? graph_name : pset.graph_name, label_name);
     }
 
     else if (drop_graph)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM drop_graph('%s', %s);",
-            graph_name ? graph_name : pset.graph_name, cascade ? "true" : "false");
+            temp, graph_name ? graph_name : pset.graph_name, cascade ? "true" : "false");
     }
 
     else if (rename_graph)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM alter_graph('%s', 'RENAME', '%s');",
-            graph_name ? graph_name : pset.graph_name, alter_graph_name);
+            temp, graph_name ? graph_name : pset.graph_name, alter_graph_name);
     }
 
     else if (load_labels)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM load_labels_from_file('%s', '%s', '%s', %s);",
+            temp,
             graph_name ? graph_name : pset.graph_name,
             label_name, file_path, with_ids ? "true" : "false");
     }
@@ -1069,9 +1299,10 @@ char* convert_to_psql_command(char* data)
     else if (load_edges)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM load_edges_from_file('%s', '%s', '%s');",
-            graph_name ? graph_name : pset.graph_name, label_name, file_path);
+            temp, graph_name ? graph_name : pset.graph_name, label_name, file_path);
     }
 
     else if (set_path)
@@ -1088,9 +1319,10 @@ char* convert_to_psql_command(char* data)
     else if (prepare)
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM age_prepare_cypher('%s', '%s');",
-            graph_name ? graph_name : pset.graph_name, "Not supported");
+            temp, graph_name ? graph_name : pset.graph_name, "Not supported");
     }
 
     else if (show)
@@ -1101,10 +1333,12 @@ char* convert_to_psql_command(char* data)
     else
     {
         snprintf(temp, sizeof(temp),
+            "%s"
             "SELECT * "
             "FROM cypher('%s', $$ "
             "%s "
             "$$) AS (%s);",
+            temp,
             graph_name ? graph_name : pset.graph_name,
             data, 
             rtn_list->idt || rtn_list->exp ? get_list(rtn_list, type_list) : "v agtype");
@@ -1119,7 +1353,7 @@ char* convert_to_psql_command(char* data)
     }
 
     /* Uncomment for debug information */
-     printf("\nINFO: %s\n", qry);
+    //printf("\nINFO: %s\n\n", qry);
 
     reset_vals();
 
