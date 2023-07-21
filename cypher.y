@@ -79,7 +79,7 @@ bool load_edges = false;
 bool reindex = false;
 bool comment = false;
 bool show = false;
-bool select = false;
+bool select_expression = false;
 
 char* qry;
 char* graph_name;
@@ -841,7 +841,7 @@ sql_statement:
     ;
 
 sql_query:
-    select_clause { select = true; }
+    select_clause { select_expression  = true; }
     | where_clause
     ;
 
@@ -1215,6 +1215,7 @@ void reset_vals(void)
     reindex = false;
     comment = false;
     show = false;
+    select_expression = false;
 
     alter_graph_name = NULL;
     label_name = NULL;
