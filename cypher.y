@@ -1151,13 +1151,11 @@ char* convert_to_psql_command(char* data)
             if (strncmp(start_keywords[i], "FROM (", 6) == 0 || strncmp(start_keywords[i], "from (", 6) == 0)
                 found = strstr(data, start_keywords[i]) + 6;
 
-            else if (strncmp(start_keywords[i], "RETURN ", 7) == 0 || strcmp(start_keywords[i], "return ", 7) == 0)
+            else if (strncmp(start_keywords[i], "RETURN ", 7) == 0 || strncmp(start_keywords[i], "return ", 7) == 0)
                 found = return_query ? strstr(data, start_keywords[i]) + 13 : strstr(data, start_keywords[i]);
                 
             else
                 found = strstr(data, start_keywords[i]);
-            
-            printf("%s\n", found ? found : "NULL");
 
             if (found)
             {
