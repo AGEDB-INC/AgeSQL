@@ -98,8 +98,8 @@
 "AND"|"and" { return AND; }
 "OR"|"or" { return OR; }
 "XOR"|"xor" { return XOR; }
-"TRUE"|"true" { return TRUE; }
-"FALSE"|"false" { return FALSE; }
+"TRUE"|"true" { return TRU; }
+"FALSE"|"false" { return FAL; }
 "IS"|"is" { return IS; }
 "IN"|"in" { return IN; }
 "NOT"|"not" { return NOT; }
