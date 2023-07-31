@@ -1,16 +1,37 @@
 ## AgeSQL
 AgeSQL is a command-line interface (CLI) client for PostgreSQL that extends its capabilities to support Cypher queries along with traditional SQL. This tool leverages the Age extension for PostgreSQL, which enables graph queries within the database.
 
+The aim of AgeSQL is to create a CLI tool that operates similarly to the existing PostgreSQL CLI (psql) and provides complete functionality for working with graph databases. In addition, AgeSQL wraps Cypher commands to simplify their usage within PostgreSQL.
+
+Implementing a CLI tool like AgeSQL comes with several challenges which has been addressed:
+
+- Determining the graph to use: The CLI tool has a mechanism to identify the graph to be queried. The CLI tool can handle different graphs based on user input.
+
+
+- Determining the number of output parameters: The CLI tool knows the number of parameters to expect in the final result. This information is crucial for processing and presenting the query results accurately.
+
+
+- Determining the output type: The CLI tool identifies the appropriate output type for each parameter in the result. Different data types supported by PostgreSQL are accounted for, such as pg_float8 or agtype, to ensure proper handling and interpretation of the data.
+
+These challenges may impact the ability to use commands across multiple graph databases and limit the use of hybrid SQL/Cypher commands. These factors are considered when designing and implementing the CLI tool.
+
+
 ## Features
-Seamless integration of Cypher queries into PostgreSQL using the Age extension.
+AgeSQL extends the PostgreSQL CLI by adding support for executing Cypher queries within the database. This allows users to work with graph data using familiar SQL syntax while benefiting from the expressive power of Cypher.
 
-Allows you to run Cypher queries directly from the AgeSQL CLI.
+The key features of AgeSQL include:
 
-Converts Cypher queries into PostgreSQL functions internally, eliminating the need for manual function calls.
+1. Seamless integration of Cypher queries into PostgreSQL using the Age extension: Supports standard SQL queries in addition to Cypher queries and converts Cypher queries into PostgreSQL functions internally, eliminating the need for manual function calls
 
-Supports standard SQL queries in addition to Cypher queries.
 
-Provides a familiar psql-like interface for easy interaction with the database.
+2. Execution of Cypher queries: AgeSQL allows you to execute Cypher queries directly within the PostgreSQL database. This enables graph traversal, pattern matching, and graph analysis operations.
+
+3. Integration with traditional SQL: AgeSQL seamlessly integrates Cypher queries with traditional SQL. It wraps Cypher commands in SQL syntax to execute them within PostgreSQL.
+
+4. Support for graph-specific operations: AgeSQL supports graph-specific operations, such as traversing nodes and edges, retrieving properties, and performing graph analytics.
+
+5. Ease of use: Provides a familiar psql-like interface for easy interaction with the database.
+
 
 ## Installation
 To install AgeSQL, follow these steps:
@@ -144,17 +165,17 @@ AgeSQL seamlessly converts Cypher queries to PostgreSQL functions internally. Yo
 ## Contributing
 Contributions to AgeSQL are welcome! If you would like to contribute, please follow these guidelines:
 
-Fork the AgeSQL repository.
+1. Fork the AgeSQL repository.
 
-Create a new branch for your feature or bug fix.
+2. Create a new branch for your feature or bug fix.
 
-Commit your changes to your branch.
+3. Commit your changes to your branch.
 
-Push your branch to your forked repository.
+4. Push your branch to your forked repository.
 
-Submit a pull request to the main AgeSQL repository.
+5. Submit a pull request to the main AgeSQL repository.
 
 Please ensure that your code adheres to the existing coding style and includes appropriate tests.
 
-### License
+## License
 AgeSQL is released under the MIT License.
