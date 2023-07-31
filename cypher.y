@@ -331,27 +331,21 @@ constraint_patt:
 
 assert_patt_opt:
     /* empty */
-    | ASSERT compare_list constraint_addon_opt
-    | ASSERT LPAREN compare_list constraint_addon_opt RPAREN
+    | ASSERT compare_list
+    | ASSERT LPAREN compare_list RPAREN
     ;
 
 compare_list:
-    compare_expression
-    | compare_list logic compare_expression
-    ;
-
-compare_expression:
-    math_expression
-    | compare_expression compare math_expression
+    math_expression constraint_addon_opt
+    | math_expression constraint_addon_opt logic compare_list
     ;
 
 constraint_addon_opt:
     /* empty */
-    | IS not_opt UNIQUE
-    | IS not_opt NUL
-    | not_opt IN expression
-    | constraint_addon_opt logic constraint_addon_opt
-    ;
+    | IS not_opt UNIQUE constraint_addon_opt
+    | IS not_opt NUL constraint_addon_opt
+    | not_opt IN expression constraint_addon_opt
+    ; 
 
 or_replace_opt:
     /* empty */
@@ -409,12 +403,8 @@ create_function_contents:
 
 create_function_content:
     math_expression SEMICOLON
-    | return_query_opt queries into_opt SEMICOLON
-    ;
-
-return_query_opt:
-    /* empty */
-    | RETURN QUERY { return_query = true; }
+    | queries into_opt SEMICOLON
+    | RETURN QUERY queries into_opt SEMICOLON { return_query = true; }
     ;
 
 into_opt:
@@ -579,7 +569,7 @@ node_pattern:
     LPAREN node_alias_opt node_labels_opt node_properties_opt only_opt
     dollar_opt RPAREN
     | LPAREN IDENTIFIER compare expression only_opt RPAREN
-    | LPAREN expression_opt RPAREN
+    | LPAREN EQUALS expression RPAREN
     ;
 
 node_alias_opt:
@@ -771,8 +761,13 @@ remove_clause:
  *****************************************************************************/
 
 return_clause:
-    RETURN distinct_opt return_item_clause union_opt
-    | RETURN not_opt exists_clause union_opt
+    RETURN distinct_not_opt return_item_clause union_opt
+    ;
+
+distinct_not_opt:
+    /* empty */
+    | DISTINCT
+    | NOT
     ;
 
 return_item_clause:
@@ -1027,7 +1022,6 @@ expression:
     | DOLLAR INTEGER { $$ = "dollar_int"; }
     | DOLLAR IDENTIFIER { $$ = "dollar_identifier"; }
     | ASTERISK { $$ = "*"; }
-    | LPAREN math_expression RPAREN { $$ = $2; }
     ;
 
 negative_opt:
@@ -1180,7 +1174,7 @@ logic:
 
 math_expression:
     expression { $$ = $1; }
-    | math_expression EQUALS expression
+    | math_expression compare expression
       {
         char* temp = (char*) malloc(sizeof(char));
         sprintf(temp, "%s = %s", $1, $3);
