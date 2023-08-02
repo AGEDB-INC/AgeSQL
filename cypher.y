@@ -182,8 +182,7 @@ static struct MapPair* type_list = NULL;
 
 %token              UNKNOWN
 
-%left               ARROW
-%left               PIPE
+%left               ARROW PIPE
 
 %start              statement
 
@@ -194,6 +193,7 @@ statement:
 
 queries:
     query
+    | set_graph_clause { set_path = true; }
     | queries query
     ;
 
@@ -209,12 +209,10 @@ query:
     | load_clause { load = true; }
     | match_clause { match = true; }
     | merge_clause { merge = true; }
-    | on_clause
     | prepare_clause { prepare = true; }
     | reindex_clause { reindex = true; }
     | remove_clause
     | return_clause { rtn = true; }
-    | set_graph_clause { set_path = true; }
     | show_clause { show = true; }
     | sql_statement
     | unwind_clause { unwind = true; }
@@ -298,6 +296,7 @@ create_pattern:
     | or_replace_opt FUNCTION function RETURNS setof_opt expression
       create_function_ext_opt { create_function = true; }
     | pattern_list set_clause_opt { create = true; }
+    ;
 
 logged_opt:
     /* empty */
@@ -307,7 +306,8 @@ logged_opt:
 
 inherits_opt:
     /* empty */
-    | INHERITS { inheritance = true; } expression
+    | INHERITS expression { inheritance = true; }
+    | INHERITS LPAREN id_list RPAREN { inheritance = true; }
     ;
 
 on_clause_opt:
@@ -473,7 +473,6 @@ stmt_info_opt:
 
 exists_clause:
     EXISTS LPAREN exists_pattern RPAREN
-    | exists_clause COMMA exists_pattern
     ;
 
 exists_pattern:
@@ -514,7 +513,7 @@ load_clause:
     ;
 
 load_pattern:
-    FROM IDENTIFIER as_clause_opt
+    FROM IDENTIFIER as_opt
     | LABELS with_id_opt IDENTIFIER FROM STRING ON IDENTIFIER
       {
         label_name = $3; file_path = $5; graph_name = $7; load_labels = true;
@@ -860,12 +859,10 @@ show_clause:
  
 sql_statement:
     sql_query
-    | sql_statement sql_query
     ;
 
 sql_query:
     select_clause { sql_select = true; }
-    | where_clause
     ;
 
 /*****************************************************************************
@@ -904,22 +901,23 @@ unwind_clause:
  *****************************************************************************/
 
 where_clause:
-    WHERE where_expression
+    WHERE where_expressions
     ;
+
+where_expressions:
+    where_expression
+    | where_expressions logic where_expression
 
 where_expression:
-    boolean
-    | exists_clause
-    | function
-    | IDENTIFIER
-    | not_opt expression where_compare not_opt expression
-    | where_expression logic where_expression
+    exists_clause
+    | not_opt expression where_compare_opt
     ;
 
-where_compare:
-    compare
-    | IS
-    | not_opt IN
+where_compare_opt:
+    /* empty */
+    | compare not_opt expression
+    | IS not_opt expression
+    | not_opt IN not_opt expression
     ;
 
 /*****************************************************************************
@@ -972,33 +970,26 @@ expression:
         $$ = temp;
         free(temp);
     }
-    | negative_opt INTEGER typecast_opt
+    | negative_opt INTEGER
       {
         char* temp = (char*) malloc(sizeof(char));
         sprintf(temp, "%d", $2);
         $$ = temp;
         free(temp);
       }
-    | negative_opt FLOAT typecast_opt
+    | negative_opt FLOAT
       {
         char* temp = (char*) malloc(sizeof(char));
         sprintf(temp, "%f", $2);
         $$ = temp;
         free(temp);
       }
-    | str_val array_opt dot_operator_opt typecast_opt as_clause_opt
+    | str_val array_opt dot_operator_opt
       { $$ = $1; }
     | boolean
       {
         char* temp = (char*) malloc(sizeof(char));
         sprintf(temp, "?_bool");
-        $$ = temp;
-        free(temp);
-      }
-    | LBRACKET list_opt RBRACKET
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "[]_list");
         $$ = temp;
         free(temp);
       }
@@ -1016,9 +1007,7 @@ expression:
         $$ = temp;
         free(temp);
       }
-    | function array_opt dot_operator_opt typecast_opt { $$ = $1; }
-    | LPAREN function RPAREN array_opt dot_operator_opt { $$ = $2; }
-    | LPAREN id_list RPAREN { $$ = $2->idt; }
+    | function array_opt dot_operator_opt { $$ = $1; }
     | DOLLAR INTEGER { $$ = "dollar_int"; }
     | DOLLAR IDENTIFIER { $$ = "dollar_identifier"; }
     | ASTERISK { $$ = "*"; }
@@ -1039,41 +1028,23 @@ dot_operator_opt:
     | DOT IDENTIFIER
     ;
 
-list_opt:
-    /* empty */
-    | list
-    ;
-
-list:
-    expression
-    | list COMMA expression
-    ;
-
 expression_ext_opt:
     /* empty */
-    | IN expression where_clause_opt
-    ;
-
-where_clause_opt:
-    /* empty */
-    | where_clause
+    | IN expression
     ;
 
 function:
     IDENTIFIER LPAREN function_params_opt RPAREN { $$ = $1; }
-    | IDENTIFIER LPAREN expression_list RPAREN { $$ = $1; }
-    | IDENTIFIER LPAREN path_pattern RPAREN { $$ = $1; }
-    | IDENTIFIER LPAREN ASTERISK RPAREN { $$ = $1; }
     ;
 
 function_params_opt:
     /* empty */
-    | function_params
+    | function_params_list
     ;
 
-function_params:
-    IDENTIFIER math_expression
-    | function_params COMMA IDENTIFIER math_expression
+function_params_list:
+    expression_list
+    | path_pattern
     ;
 
 id_list:
@@ -1121,13 +1092,6 @@ item:
         $$ = (MapPair*) malloc(sizeof(MapPair));
         $$->exp = NULL;
         $$->idt = $4;
-      }
-    | math_expression is_expression_opt EQUALS math_expression
-      is_expression_opt AS IDENTIFIER
-      {
-        $$ = (MapPair*) malloc(sizeof(MapPair));
-        $$->exp = NULL;
-        $$->idt = $7;
       }
     | math_expression IN math_expression
       {
@@ -1264,9 +1228,9 @@ str_val:
  *
  *****************************************************************************/
 
-as_clause_opt:
+as_opt:
     /* empty */
-    | as_clause
+    | AS IDENTIFIER
     ;
 
 boolean_opt:
