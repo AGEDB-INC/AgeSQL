@@ -566,7 +566,7 @@ path_pattern:
 
 node_pattern:
     LPAREN node_alias_opt node_labels_opt node_properties_opt only_opt
-    dollar_opt RPAREN
+    dollar_id_opt RPAREN
     | LPAREN IDENTIFIER compare expression only_opt RPAREN
     | LPAREN EQUALS expression RPAREN
     ;
@@ -610,7 +610,7 @@ only_opt:
     | ONLY
     ;
 
-dollar_opt:
+dollar_id_opt:
     /* empty */
     | DOLLAR IDENTIFIER
     ;
@@ -634,7 +634,12 @@ rel_alias_opt:
 
 rel_labels_opt:
     /* empty */ { $$ = NULL; }
-    | COLON IDENTIFIER pipe_opt expression_opt { $$ = $2; } 
+    | COLON dollar_opt IDENTIFIER pipe_opt expression_opt { $$ = $3; } 
+    ;
+
+dollar_opt:
+    /* empty */
+    | DOLLAR
     ;
 
 pipe_opt:
@@ -772,8 +777,6 @@ distinct_not_opt:
 return_item_clause:
     return_item_list str_match_clause_opt order_clause_opt skip_clause_opt
     limit_clause_opt
-    | LBRACKET return_item_list str_match_clause_opt RBRACKET order_clause_opt
-      skip_clause_opt limit_clause_opt
     ;
 
 return_item_list:
@@ -917,7 +920,7 @@ where_compare_opt:
     /* empty */
     | compare not_opt expression
     | IS not_opt expression
-    | not_opt IN not_opt expression
+    | not_opt IN expression
     ;
 
 /*****************************************************************************
@@ -989,21 +992,28 @@ expression:
     | boolean
       {
         char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "?_bool");
+        sprintf(temp, "bool");
         $$ = temp;
         free(temp);
       }
     | LBRACE map_literal RBRACE
       {
         char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "{}_property");
+        sprintf(temp, "property");
         $$ = temp;
         free(temp);
       }
-    | LPAREN sql_statement RPAREN
+    | LBRACKET list_opt RBRACKET
       {
         char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "|_sql");
+        sprintf(temp, "list");
+        $$ = temp;
+        free(temp);
+      }
+    | LPAREN parentheses RPAREN
+      {
+        char* temp = (char*) malloc(sizeof(char));
+        sprintf(temp, "paren");
         $$ = temp;
         free(temp);
       }
@@ -1026,6 +1036,20 @@ array_opt:
 dot_operator_opt:
     /* empty */
     | DOT IDENTIFIER
+    ;
+
+list_opt:
+    /* empty */
+    | list
+    ;
+
+list:
+    expression
+    | list COMMA expression
+    ;
+
+parentheses:
+    sql_statement
     ;
 
 expression_ext_opt:
@@ -1138,83 +1162,27 @@ logic:
 
 math_expression:
     expression { $$ = $1; }
-    | math_expression compare expression
+    | math_expression operation expression
       {
         char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s = %s", $1, $3);
+        sprintf(temp, "math_expression");
         $$ = temp;
         free(temp);
       }
-    | math_expression PLUS expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s + %s", $1, $3);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression PLUS EQUALS expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s += %s", $1, $4);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression DASH expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s - %s", $1, $3);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression DASH EQUALS expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s -= %s", $1, $4);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression ASTERISK expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s * %s", $1, $3);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression ASTERISK EQUALS expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s *= %s", $1, $4);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression SLASH expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s / %s", $1, $3);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression SLASH EQUALS expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s /= %s", $1, $4);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression PERCENT expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s %% %s", $1, $3);
-        $$ = temp;
-        free(temp);
-      }
-    | math_expression CARET expression
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%s ^ %s", $1, $3);
-        $$ = temp;
-        free(temp);
-      }
+    ;
+
+operation:
+    compare
+    | PLUS
+    | PLUS EQUALS
+    | DASH
+    | DASH EQUALS
+    | ASTERISK
+    | ASTERISK EQUALS
+    | SLASH
+    | SLASH EQUALS
+    | PERCENT
+    | CARET
     ;
 
 str_val:
