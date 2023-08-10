@@ -1215,6 +1215,13 @@ math_expression:
         $$ = temp;
         free(temp);
       }
+    | math_expression PLUS LPAREN math_expression RPAREN
+      {
+        char* temp = (char*) malloc(sizeof(char));
+        sprintf(temp, "%s + (%s)", $1, $4);
+        $$ = temp;
+        free(temp);
+      }
     ;
 
 str_val:
@@ -1319,7 +1326,7 @@ psql_scan_cypher_command(char* data)
     (
         alter || comment || create || create_elabel || create_graph || create_vlabel ||
         drop || execute || load || match || merge || optional || prepare || reindex ||
-        rtn || set_path || show || unwind
+        rtn || set_path || show || unwind || create_function
     )
         return true;
     
@@ -1332,7 +1339,7 @@ bool yyerror(char const* s)
     (
         alter || comment || create || create_elabel || create_graph || create_vlabel ||
         drop || execute || load || match || merge || optional || prepare || reindex ||
-        rtn || set_path || show || unwind
+        rtn || set_path || show || unwind || create_function
     )
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
 
