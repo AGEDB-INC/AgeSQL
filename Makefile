@@ -55,7 +55,7 @@ OBJS = \
 all: psql
 
 cypher.c: cypher.l
-	flex -b -Cfe -p -p -o'cypher.c' cypher.l
+	flex -b -Cfe -p -p -o 'cypher.c' cypher.l
 
 cypher.tab.c: cypher.y
 	bison -d cypher.y
