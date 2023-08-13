@@ -125,7 +125,7 @@ static struct MapPair* type_list = NULL;
 
 %type <str_val>     node_alias_opt node_labels_opt expression_list expression
                     math_expression function rel_alias_opt rel_labels_opt
-                    compare logic typecast_opt str_val expression_opt
+                    compare logic rtn_typecast_opt str_val expression_opt
                     graph_path_list
 
 %token
@@ -402,7 +402,7 @@ create_function_contents:
     ;
 
 create_function_content:
-    math_expression SEMICOLON
+    math_expression typecast_opt SEMICOLON
     | queries into_opt SEMICOLON
     | RETURN QUERY queries into_opt SEMICOLON { return_query = true; }
     ;
@@ -419,12 +419,17 @@ into_opt:
  *****************************************************************************/
 
 delete_clause:
-    detach_opt DELETE expression_list set_clause_opt
+    detach_opt DELETE delete_list set_clause_opt
     ;
 
 detach_opt:
     /* empty */
     | DETACH
+    ;
+
+delete_list:
+    expression_list
+    | path_pattern_list
     ;
 
 /*****************************************************************************
@@ -777,9 +782,9 @@ return_item_clause:
     ;
 
 return_item_list:
-    item typecast_opt
+    item rtn_typecast_opt
     { rtn_list->exp = $1->exp; rtn_list->idt = $1->idt; type_list->exp = $2; }
-    | return_item_list COMMA item typecast_opt
+    | return_item_list COMMA item rtn_typecast_opt
       {
         list_append(&rtn_list, $3->exp, $3->idt);
         list_append(&type_list, $4, NULL);
@@ -963,13 +968,7 @@ expression_list:
     ;
 
 expression:
-    NUL
-    {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "!_null");
-        $$ = temp;
-        free(temp);
-    }
+    NUL { $$ = "null"; }
     | negative_opt INTEGER
       {
         char* temp = (char*) malloc(sizeof(char));
@@ -984,29 +983,11 @@ expression:
         $$ = temp;
         free(temp);
       }
-    | str_val array_opt dot_operator_opt
-      { $$ = $1; }
-    | boolean
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "?_bool");
-        $$ = temp;
-        free(temp);
-      }
-    | LBRACE map_literal RBRACE
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "{}_property");
-        $$ = temp;
-        free(temp);
-      }
-    | LPAREN sql_statement RPAREN
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "|_sql");
-        $$ = temp;
-        free(temp);
-      }
+    | str_val str_val_opt array_opt dot_operator_opt { $$ = $1; }
+    | boolean { $$ = "bool"; }
+    | LBRACE map_literal RBRACE { $$ = "property"; }
+    | LBRACKET item_list_opt RBRACKET { $$ = "list"; }
+    | LPAREN sql_statement RPAREN { $$ = "sql"; }
     | function array_opt dot_operator_opt { $$ = $1; }
     | DOLLAR INTEGER { $$ = "dollar_int"; }
     | DOLLAR IDENTIFIER { $$ = "dollar_identifier"; }
@@ -1018,6 +999,11 @@ negative_opt:
     | DASH
     ;
 
+str_val_opt:
+    /* empty */
+    | str_val
+    ;
+
 array_opt:
     /* empty */
     | LBRACKET expression RBRACKET
@@ -1026,6 +1012,11 @@ array_opt:
 dot_operator_opt:
     /* empty */
     | DOT IDENTIFIER
+    ;
+
+item_list_opt:
+    /* empty */
+    | item_list
     ;
 
 expression_ext_opt:
@@ -1122,6 +1113,12 @@ item:
         $$ = (MapPair*) malloc(sizeof(MapPair));
         $$->exp = "case";
         $$->idt = NULL;
+      }
+    | LPAREN item RPAREN
+      {
+        $$ = (MapPair*) malloc(sizeof(MapPair));
+        $$->exp = $2->exp;
+        $$->idt = $2->idt;
       }
     ;
 
@@ -1273,6 +1270,19 @@ order_clause_opt:
     | order_clause
     ;
 
+rtn_typecast_opt:
+    /* empty */ { $$ = "agtype"; }
+    | COLON COLON str_val
+      {
+	    if (strcmp($3, "pg_bigint") == 0 || strcmp($3, "numeric") == 0)
+            $$ = "int";
+        else if (strcmp($3, "pg_float8") == 0)
+            $$ = "float";
+        else
+            $$ = $3;
+      }
+    ;
+
 set_clause_opt:
     /* empty */
     | set_clause
@@ -1284,16 +1294,8 @@ skip_clause_opt:
     ;
 
 typecast_opt:
-    /* empty */ { $$ = "agtype"; }
+    /* empty */
     | COLON COLON str_val
-      {
-	    if (strcmp($3, "pg_bigint") == 0 || strcmp($3, "numeric") == 0)
-            $$ = "int";
-        else if (strcmp($3, "pg_float8") == 0)
-            $$ = "float";
-        else
-            $$ = $3;
-      }
     ;
 %%
 
@@ -1319,7 +1321,7 @@ psql_scan_cypher_command(char* data)
     (
         alter || comment || create || create_elabel || create_graph || create_vlabel ||
         drop || execute || load || match || merge || optional || prepare || reindex ||
-        rtn || set_path || show || unwind
+        rtn || set_path || show || unwind || create_function
     )
         return true;
     
@@ -1332,7 +1334,7 @@ bool yyerror(char const* s)
     (
         alter || comment || create || create_elabel || create_graph || create_vlabel ||
         drop || execute || load || match || merge || optional || prepare || reindex ||
-        rtn || set_path || show || unwind
+        rtn || set_path || show || unwind || create_function
     )
         printf("ERROR:\t%s at or near \"%s\"\n", s, yylval.str_val);
 
