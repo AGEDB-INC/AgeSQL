@@ -1373,26 +1373,26 @@ char* convert_to_psql_command(char* data)
             };
 
         /* Loop through the keywords and find the first occurrence in the query */
-        for (int i = 0; i < sizeof(start_keywords) / sizeof(start_keywords[0]); i++)
+ for (int i = 0; i < sizeof(start_keywords) / sizeof(start_keywords[0]); i++)
+{
+    found = strstr(data, start_keywords[i]);
+
+    if (found)
+    {
+        if (!strcmp(start_keywords[i], "FROM (") || !strcmp(start_keywords[i], "from ("))
+            found += 6;
+        else if (!strcmp(start_keywords[i], "RETURN ") || !strcmp(start_keywords[i], "return "))
+            found += 13;
+
+        keyword_index = found - data;
+
+        if (index == 0 || keyword_index < index)
         {
-            found = strstr(data, start_keywords[i]);
-
-            if (found)
-            {
-                if (!strcmp(start_keywords[i], "FROM (") || !strcmp(start_keywords[i], "from ("))
-                    found += 6;
-                else if (!strcmp(start_keywords[i], "RETURN ") || !strcmp(start_keywords[i], "return "))
-                    found += 13;
-                
-                keyword_index = found - data;
-
-                if (index == 0 || keyword_index < index)
-                {
-                    found_start = strdup(found);
-                    index = keyword_index;
-                }
-            }
+            found_start = strdup(found);
+            index = keyword_index;
         }
+    }
+}
 
         /* 
          * If any keyword is found, remove the rest of the query and update
