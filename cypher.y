@@ -1726,30 +1726,29 @@ get_id_list(MapPair* list)
     return str;
 }
 
-char*
-get_rtn_list(MapPair* list, MapPair* list2)
+char* get_rtn_list(MapPair* list, MapPair* list2)
 {
-    struct MapPair* current = list;
-    struct MapPair* current_type = list2;
     char* str = malloc(1000);
     char temp[1000] = "";
-    char count_str[100] = "";
     int rtn_count = 1;
+
     strcpy(str, "");
 
-    while (current != NULL)
+    while (list != NULL && list2 != NULL)
     {
+        char count_str[100];
         sprintf(count_str, "rtn_%d", rtn_count++);
-        
-        sprintf(temp, "%s %s%s", 
-            (current->idt != NULL) ? current->idt : count_str,
-            (current_type->idt != NULL) ? current_type->idt : current_type->exp,
-            (current->next != NULL) ? ", " : "");
+
+        const char* idt = (list->idt != NULL) ? list->idt : count_str;
+        const char* idt_type = (list2->idt != NULL) ? list2->idt : list2->exp;
+
+        snprintf(temp, sizeof(temp), "%s %s%s",
+                 idt, idt_type, (list->next != NULL) ? ", " : "");
 
         strcat(str, temp);
 
-        current = current->next;
-        current_type = current_type->next;
+        list = list->next;
+        list2 = list2->next;
     }
 
     return str;
