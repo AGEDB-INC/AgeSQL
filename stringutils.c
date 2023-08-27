@@ -237,38 +237,51 @@ strtokx(const char *s,
  * Note that the source string is overwritten in-place.
  */
 void
-strip_quotes(char *source, char quote, char escape, int encoding)
+/*
+ * strip_quotes - Remove quotes and escape sequences from a string.
+ *
+ * This function removes leading and trailing quotes and processes escape
+ * sequences within a quoted string.
+ *
+ * Parameters:
+ *   source   - The source string.
+ *   quote    - The quote character.
+ *   escape   - The escape character.
+ *   encoding - The character encoding (used for multi-byte characters).
+ */
+void strip_quotes(char *source, char quote, char escape, int encoding)
 {
-	char	   *src;
-	char	   *dst;
+    char *src;
+    char *dst;
 
-	Assert(source != NULL);
-	Assert(quote != '\0');
+    Assert(source != NULL);
+    Assert(quote != '\0');
 
-	src = dst = source;
+    src = dst = source;
 
-	if (*src && *src == quote)
-		src++;					/* skip leading quote */
+    if (*src && *src == quote)
+        src++;                  /* skip leading quote */
 
-	while (*src)
-	{
-		char		c = *src;
-		int			i;
+    while (*src)
+    {
+        char c = *src;
+        int i;
 
-		if (c == quote && src[1] == '\0')
-			break;				/* skip trailing quote */
-		else if (c == quote && src[1] == quote)
-			src++;				/* process doubled quote */
-		else if (c == escape && src[1] != '\0')
-			src++;				/* process escaped character */
+        if (c == quote && src[1] == '\0')
+            break;              /* skip trailing quote */
+        else if (c == quote && src[1] == quote)
+            src++;              /* process doubled quote */
+        else if (c == escape && src[1] != '\0')
+            src++;              /* process escaped character */
 
-		i = PQmblenBounded(src, encoding);
-		while (i--)
-			*dst++ = *src++;
-	}
+        i = PQmblenBounded(src, encoding);
+        while (i--)
+            *dst++ = *src++;
+    }
 
-	*dst = '\0';
+    *dst = '\0';
 }
+
 
 
 /*

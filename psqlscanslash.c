@@ -540,25 +540,28 @@ void *yyalloc ( yy_size_t , yyscan_t yyscanner );
 void *yyrealloc ( void *, yy_size_t , yyscan_t yyscanner );
 void yyfree ( void * , yyscan_t yyscanner );
 
-#define yy_new_buffer yy_create_buffer
-#define yy_set_interactive(is_interactive) \
-	{ \
-	if ( ! YY_CURRENT_BUFFER ){ \
-        yyensure_buffer_stack (yyscanner); \
-		YY_CURRENT_BUFFER_LVALUE =    \
-            yy_create_buffer( yyin, YY_BUF_SIZE , yyscanner); \
-	} \
-	YY_CURRENT_BUFFER_LVALUE->yy_is_interactive = is_interactive; \
-	}
-#define yy_set_bol(at_bol) \
-	{ \
-	if ( ! YY_CURRENT_BUFFER ){\
-        yyensure_buffer_stack (yyscanner); \
-		YY_CURRENT_BUFFER_LVALUE =    \
-            yy_create_buffer( yyin, YY_BUF_SIZE , yyscanner); \
-	} \
-	YY_CURRENT_BUFFER_LVALUE->yy_at_bol = at_bol; \
-	}
+#define YY_CURRENT_BUFFER_LVALUE yy_current_buffer
+
+#define YY_ENSURE_BUFFER_STACK() \
+    do { \
+        if (!YY_CURRENT_BUFFER_LVALUE) { \
+            yyensure_buffer_stack(yyscanner); \
+            YY_CURRENT_BUFFER_LVALUE = yy_create_buffer(yyin, YY_BUF_SIZE, yyscanner); \
+        } \
+    } while (0)
+
+#define YY_SET_INTERACTIVE(is_interactive) \
+    do { \
+        YY_ENSURE_BUFFER_STACK(); \
+        YY_CURRENT_BUFFER_LVALUE->yy_is_interactive = is_interactive; \
+    } while (0)
+
+#define YY_SET_BOL(at_bol) \
+    do { \
+        YY_ENSURE_BUFFER_STACK(); \
+        YY_CURRENT_BUFFER_LVALUE->yy_at_bol = at_bol; \
+    } while (0)
+
 #define YY_AT_BOL() (YY_CURRENT_BUFFER_LVALUE->yy_at_bol)
 
 /* Begin user sect3 */
