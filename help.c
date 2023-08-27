@@ -54,8 +54,6 @@ usage(unsigned short int pager)
 	const char *user;
 	char	   *errstr;
 	PQExpBufferData buf;
-	int			nlcount;
-	FILE	   *output;
 
 	/* Find default user, in case we need it. */
 	user = getenv("PGUSER");
@@ -77,34 +75,32 @@ usage(unsigned short int pager)
 	HELP0("  psql [OPTION]... [DBNAME [USERNAME]]\n\n");
 
 	HELP0("General options:\n");
-	/* Display default database */
 	env = getenv("PGDATABASE");
 	if (!env)
 		env = user;
-	HELP0("  -c, --command=COMMAND    run only single command (SQL or internal) and exit\n");
-	HELPN("  -d, --dbname=DBNAME      database name to connect to (default: \"%s\")\n",
-		  env);
-	HELP0("  -f, --file=FILENAME      execute commands from file, then exit\n");
-	HELP0("  -l, --list               list available databases, then exit\n");
+	HELP0("  -c, --command=COMMAND    run only a single command and exit\n");
+	HELPN("  -d, --dbname=DBNAME      database name to connect to (default: \"%s\")\n", env);
+	HELP0("  -f, --file=FILENAME      execute commands from a file and then exit\n");
+	HELP0("  -l, --list               list available databases and exit\n");
 	HELP0("  -v, --set=, --variable=NAME=VALUE\n"
 		  "                           set psql variable NAME to VALUE\n"
 		  "                           (e.g., -v ON_ERROR_STOP=1)\n");
-	HELP0("  -V, --version            output version information, then exit\n");
-	HELP0("  -X, --no-psqlrc          do not read startup file (~/.psqlrc)\n");
-	HELP0("  -1 (\"one\"), --single-transaction\n"
+	HELP0("  -V, --version            output version information and exit\n");
+	HELP0("  -X, --no-psqlrc          do not read the startup file (~/.psqlrc)\n");
+	HELP0("  -1, --single-transaction\n"
 		  "                           execute as a single transaction (if non-interactive)\n");
-	HELP0("  -?, --help[=options]     show this help, then exit\n");
-	HELP0("      --help=commands      list backslash commands, then exit\n");
-	HELP0("      --help=variables     list special variables, then exit\n");
+	HELP0("  -?, --help[=options]     show this help and exit\n");
+	HELP0("      --help=commands      list backslash commands and exit\n");
+	HELP0("      --help=variables     list special variables and exit\n");
 
 	HELP0("\nInput and output options:\n");
-	HELP0("  -a, --echo-all           echo all input from script\n");
+	HELP0("  -a, --echo-all           echo all input from a script\n");
 	HELP0("  -b, --echo-errors        echo failed commands\n");
-	HELP0("  -e, --echo-queries       echo commands sent to server\n");
+	HELP0("  -e, --echo-queries       echo commands sent to the server\n");
 	HELP0("  -E, --echo-hidden        display queries that internal commands generate\n");
-	HELP0("  -L, --log-file=FILENAME  send session log to file\n");
+	HELP0("  -L, --log-file=FILENAME  send session log to a file\n");
 	HELP0("  -n, --no-readline        disable enhanced command line editing (readline)\n");
-	HELP0("  -o, --output=FILENAME    send query results to file (or |pipe)\n");
+	HELP0("  -o, --output=FILENAME    send query results to a file or pipe\n");
 	HELP0("  -q, --quiet              run quietly (no messages, only query output)\n");
 	HELP0("  -s, --single-step        single-step mode (confirm each query)\n");
 	HELP0("  -S, --single-line        single-line mode (end of line terminates SQL command)\n");
@@ -128,20 +124,16 @@ usage(unsigned short int pager)
 		  "                           set record separator for unaligned output to zero byte\n");
 
 	HELP0("\nConnection options:\n");
-	/* Display default host */
 	env = getenv("PGHOST");
 	HELPN("  -h, --host=HOSTNAME      database server host or socket directory (default: \"%s\")\n",
 		  env ? env : _("local socket"));
-	/* Display default port */
 	env = getenv("PGPORT");
 	HELPN("  -p, --port=PORT          database server port (default: \"%s\")\n",
 		  env ? env : DEF_PGPORT_STR);
-	/* Display default user */
-	HELPN("  -U, --username=USERNAME  database user name (default: \"%s\")\n",
-		  user);
-	HELP0("  -w, --no-password        never prompt for password\n");
-	HELP0("  -W, --password           force password prompt (should happen automatically)\n");
-
+	HELPN("  -U, --username=USERNAME  database user name (default: \"%s\")\n", user);
+	HELP0("  -w, --no-password        never prompt for a password\n");
+	HELP0("  -W, --password           force a password prompt (should happen automatically)\n");
+}
 	HELP0("\nFor more information, type \"\\?\" (for internal commands) or \"\\help\" (for SQL\n"
 		  "commands) from within psql, or consult the psql section in the PostgreSQL\n"
 		  "documentation.\n\n");
