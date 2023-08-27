@@ -941,127 +941,88 @@ item_clause:
  *
  *****************************************************************************/
  
- boolean:
-    TRU
-    | FAL
-    ;
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%union {
+    char* str;
+}
+
+%token <str> INTEGER FLOAT IDENTIFIER
+%token EQUALS EXCLAMATION LT GT
+%token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA DOLLAR ASTERISK
+%type <str> boolean expression expression_list expression_ext_opt negative_opt array_opt dot_operator_opt
+%type <str> function function_params_opt function_params_list id_list
+
+%%
+
+boolean: TRU | FAL;
 
 compare:
-    EQUALS { $$ = "="; }
-    | EQUALS EQUALS { $$ = "=="; }
-    | EXCLAMATION EQUALS { $$ = "!="; }
-    | LT { $$ = "<"; }
-    | GT { $$ = ">"; }
-    | LT EQUALS { $$ = "<="; }
-    | GT EQUALS { $$ = ">="; }
-    | LT GT { $$ = "<>"; }
-    ;
+    EQUALS                 { $$ = "="; }
+  | EQUALS EQUALS          { $$ = "=="; }
+  | EXCLAMATION EQUALS     { $$ = "!="; }
+  | LT                     { $$ = "<"; }
+  | GT                     { $$ = ">"; }
+  | LT EQUALS              { $$ = "<="; }
+  | GT EQUALS              { $$ = ">="; }
+  | LT GT                  { $$ = "<>"; }
+  ;
 
 expression_list:
     expression expression_ext_opt { $$ = $1; }
-    | expression_list COMMA expression expression_ext_opt { $$ = $1; }
-    ;
+  | expression_list COMMA expression expression_ext_opt { $$ = $1; }
+  ;
 
 expression:
-    NUL
-    {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "!_null");
-        $$ = temp;
-        free(temp);
-    }
-    | negative_opt INTEGER
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%d", $2);
-        $$ = temp;
-        free(temp);
-      }
-    | negative_opt FLOAT
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "%f", $2);
-        $$ = temp;
-        free(temp);
-      }
-    | str_val array_opt dot_operator_opt
-      { $$ = $1; }
-    | boolean
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "?_bool");
-        $$ = temp;
-        free(temp);
-      }
-    | LBRACE map_literal RBRACE
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "{}_property");
-        $$ = temp;
-        free(temp);
-      }
-    | LPAREN sql_statement RPAREN
-      {
-        char* temp = (char*) malloc(sizeof(char));
-        sprintf(temp, "|_sql");
-        $$ = temp;
-        free(temp);
-      }
-    | function array_opt dot_operator_opt { $$ = $1; }
-    | DOLLAR INTEGER { $$ = "dollar_int"; }
-    | DOLLAR IDENTIFIER { $$ = "dollar_identifier"; }
-    | ASTERISK { $$ = "*"; }
-    ;
+    NUL                      { $$ = "!_null"; }
+  | negative_opt INTEGER     { $$ = $2; }
+  | negative_opt FLOAT       { $$ = $2; }
+  | str_val array_opt dot_operator_opt { $$ = $1; }
+  | boolean                 { $$ = "?_bool"; }
+  | LBRACE map_literal RBRACE { $$ = "{}_property"; }
+  | LPAREN sql_statement RPAREN { $$ = "|_sql"; }
+  | function array_opt dot_operator_opt { $$ = $1; }
+  | DOLLAR INTEGER          { $$ = "dollar_int"; }
+  | DOLLAR IDENTIFIER       { $$ = "dollar_identifier"; }
+  | ASTERISK                { $$ = "*"; }
+  ;
 
-negative_opt:
-    /* empty */
-    | DASH
-    ;
+negative_opt: /* empty */ | DASH;
 
-array_opt:
-    /* empty */
-    | LBRACKET expression RBRACKET
-    ;
+array_opt: /* empty */ | LBRACKET expression RBRACKET;
 
-dot_operator_opt:
-    /* empty */
-    | DOT IDENTIFIER
-    ;
+dot_operator_opt: /* empty */ | DOT IDENTIFIER;
 
-expression_ext_opt:
-    /* empty */
-    | IN expression
-    ;
+expression_ext_opt: /* empty */ | IN expression;
 
-function:
-    IDENTIFIER LPAREN function_params_opt RPAREN { $$ = $1; }
-    ;
+function: IDENTIFIER LPAREN function_params_opt RPAREN { $$ = $1; };
 
-function_params_opt:
-    /* empty */
-    | function_params_list
-    ;
+function_params_opt: /* empty */ | function_params_list;
 
-function_params_list:
-    expression_list
-    | path_pattern
-    ;
+function_params_list: expression_list | path_pattern;
 
-id_list:
-    IDENTIFIER 
-    { 
-        $$ = (MapPair*) malloc(sizeof(MapPair));
-        $$->exp = NULL;
-        $$->idt = $1;
-        list_append(&id_val_list, $$->exp, $$->idt);
-    }
-    | IDENTIFIER COMMA id_list 
-    {
-        $$ = (MapPair*) malloc(sizeof(MapPair));
-        $$->exp = NULL;
-        $$->idt = $1;
-        list_append(&id_val_list, $$->exp, $$->idt);
-    }
+id_list: IDENTIFIER {
+    $$ = (char*)malloc(strlen($1) + 1);
+    strcpy($$, $1);
+    list_append(&id_val_list, $$);
+  }
+  | IDENTIFIER COMMA id_list {
+    $$ = (char*)malloc(strlen($1) + 1);
+    strcpy($$, $1);
+    list_append(&id_val_list, $$);
+  };
+
+%%
+
+int main() {
+    // Implement your parsing and code execution logic here
+    yyparse();
+    return 0;
+}
+
     | IDENTIFIER IN expression
     {
         $$ = (MapPair*) malloc(sizeof(MapPair));
